@@ -21,7 +21,6 @@ workflow EXPRESSION {
 
     // Initialize outputs as empty
     salmon_multiqc = channel.empty()
-    salmon_tpm = channel.empty()
     
     // Use stringtie created transcriptome if set to true, otherwise use reference
     if (params.created_transcriptome_expression && assembled_gtf != null){
@@ -42,16 +41,11 @@ workflow EXPRESSION {
 
 
         // Write the paths of the salmon_quasi output files to a text file
-        quant_paths = salmon_quasi.out.quant
-            .map { it -> it.toString() }
-            .collectFile(
-            name: 'quant_paths.txt',
-            newLine: true, sort: true )
+        ch_quants = salmon_quasi.out.quant.collect()
 
         // Run the salmon_tables Rscript to obtain expression tables
-        salmon_tables(quant_paths, input_gtf, output_basename, outdir)
+        salmon_tables(ch_quants, input_gtf, output_basename, outdir)
         salmon_multiqc = salmon_tables.out.salmon_multiqc
-        salmon_tpm = salmon_tables.out.salmon_tpm
     }
 
 
@@ -64,5 +58,4 @@ workflow EXPRESSION {
 
     emit:
     salmon_multiqc
-    salmon_tpm
 }

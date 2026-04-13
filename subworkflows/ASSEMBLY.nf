@@ -35,22 +35,8 @@ workflow ASSEMBLY {
 
         stringtie_multiqc = stringtie_summary.out.stringtie_multiqc
 
-        // Wait untill all stringtie runs are completed
-        gtf_paths = stringtie.out.collect().flatten()
-                    .map { it -> it.toString() } // Change paths to strings
-
-        // Store gtflist in outputdir
-        // Replace the work dir path with the output dir
-        gtf_paths.map { it -> it.replaceFirst("${workDir}/[^/]*/[^/]*/", "${outdir}/stringtie/") } 
-            .collectFile(
-                name: 'gtflist.txt',
-                storeDir: "${outdir}/stringtie/",
-                newLine: true, sort: true )
-
-        // Store gtflist to workdir
-        gtf_list = gtf_paths.collectFile(
-            name: 'gtflist.txt',
-            newLine: true, sort: true )
+        // Collect GTF files and create a list file
+        gtf_list = stringtie.out.stringtie_gtf.collect()
     } else {
         stringtie_multiqc = null
     }
@@ -73,17 +59,21 @@ workflow ASSEMBLY {
         gtf_novel = mergeGTF.out.merged_gtf
         gtf_tracking = mergeGTF.out.tracking
 
+        refseq_input = refseq_gtf ? file("${refseq_gtf}*.gff") : []
+
         // Run filter annotate r script
         // TODO: Sort exons in gtf and add transcript biotype for stringtie tx
         filterAnnotate( reference_gtf,
-                        refseq_gtf ?: "",
+                        refseq_input,
                         gtf_novel,
                         gtf_tracking,
                         min_occurrence,
                         min_tpm,
                         output_basename,
                         "${projectDir}/bin/",
-                        outdir)
+                        outdir,
+                        file("${projectDir}/bin/filter_annotate.R"),
+                        file("${projectDir}/bin/filter_annotate_functions.R"))
 
         merged_filtered_gtf = filterAnnotate.out.gtf
 

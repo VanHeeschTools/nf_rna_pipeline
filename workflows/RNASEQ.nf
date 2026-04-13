@@ -231,7 +231,6 @@ workflow RNASEQ {
             params.output_basename,
             params.outdir)
         multiqc_files = multiqc_files.mix(EXPRESSION.out.salmon_multiqc)
-        multiqc_files = multiqc_files.mix(EXPRESSION.out.salmon_tpm)
     }
 
     /*
