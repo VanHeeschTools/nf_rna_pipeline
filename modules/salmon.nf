@@ -26,7 +26,8 @@ process salmon_quasi {
         val outdir                         // Path to the output directory
 
     output:
-        path "${sample_id}/quant.sf", emit: quant
+        //path "${sample_id}/quant.sf", emit: quant
+        path("${sample_id}_quant.sf"), emit: quant
 
     script:
         if (paired_end == true){
@@ -47,6 +48,9 @@ process salmon_quasi {
         -i "${salmon_index}" \
         ${quant_input} \
         --output "${sample_id}"
+
+        # Rename the specific file for uniqueness
+        mv ${sample_id}/quant.sf ./${sample_id}_quant.sf
         """
 }
 
@@ -56,7 +60,7 @@ process salmon_tables {
     publishDir "${outdir}/salmon", mode: 'copy', pattern: "${prefix}*"
 
     input:
-        val quant_paths
+        path quants, stageAs: "quants/*"
         path gtf
         val prefix
         val outdir
@@ -64,12 +68,14 @@ process salmon_tables {
     output:
         path "${prefix}*"
         path "${prefix}_multiqc_summary_mqc.tsv", emit: salmon_multiqc
-        path "${prefix}_transcript_tpms_mqc.tsv", emit: salmon_tpm
 
     script:
+        def path_list = quants.collect { "\$(pwd)/${it}" }.join('\n') 
         """
+        echo "${path_list}" > quant_paths.txt
+ 
         salmon_cohort_tables.R \
-        ${quant_paths} \
+        quant_paths.txt \
         ${gtf} \
         ${prefix}
         """
@@ -82,8 +88,8 @@ process featurecounts {
 
     input:
         tuple val(sample_id), val(strand), val(paired_end), path(bam) // Tuple of sample id and input read file(s)
-        val reference_gtf                                   // Path to the input reference gtf file
-        val outdir                                          // Path to output directory
+        path reference_gtf                                   // Path to the input reference gtf file
+        path outdir                                          // Path to output directory
 
     output:
         path "${sample_id}/*"

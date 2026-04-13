@@ -4,8 +4,8 @@ process MULTIQC {
 
     input:
         path multiqc_files, stageAs: "?/*"
-        val multiqc_config
-        val outdir
+        path multiqc_config
+        path outdir
 
     output:
         path "*multiqc_report.html", emit: multiqc_report

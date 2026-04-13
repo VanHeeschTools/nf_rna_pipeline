@@ -46,9 +46,9 @@ process STAR {
         tuple val(sample_id), path(reads) // Tuple containing sample id and read paths
         val paired_end                    // Bool set to true if input reads are paired end
         val usedIndex                     // Val showing read length for the star index
-        val reference_gtf                 // Input reference gtf file
-        val star_index_basedir            // Path to star index dir
-        val outdir                        // Path to output directory
+        path reference_gtf                 // Input reference gtf file
+        path star_index_basedir            // Path to star index dir
+        path outdir                        // Path to output directory
 
     output:
         //path "${sample_id}/${sample_id}.*"

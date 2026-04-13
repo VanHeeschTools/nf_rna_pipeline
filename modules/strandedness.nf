@@ -5,10 +5,10 @@ process checkStrand {
 
     input:
         tuple val(sample_id), path(reads) // Tuple containing sample id and read paths
-        val kallisto_index                // Path to kallisto index dir
-        val reference_gtf                 // Path to input reference gtf file
+        path kallisto_index                // Path to kallisto index dir
+        path reference_gtf                 // Path to input reference gtf file
         val strandedness_check     // Val, number of reads to use for strandedness check
-        val outdir                        // Path to output directory
+        path outdir                        // Path to output directory
 
     output:
         tuple val("${sample_id}"), stdout, emit: strand

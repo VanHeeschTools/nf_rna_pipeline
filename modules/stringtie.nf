@@ -4,13 +4,13 @@ process stringtie {
     publishDir "${outdir}/stringtie", mode: 'copy'
 
     input:
-        tuple val(sample_id), val(stringtie), path(bam) // Tuple of sample id and star result bam
+        tuple val(sample_id), val(stringtie), path(bam), val(paired) // Tuple of sample id and star result bam
         val chr                                         // Chromosome exclusion list 
-        val reference_gtf                               // Reference gtf file location
-        val outdir                                      // Path to output directory
+        path reference_gtf                               // Reference gtf file location
+        path outdir                                      // Path to output directory
 
     output:
-        path "${sample_id}/${sample_id}.gtf", emit: stringtie_gtf // Path to the output gtf of stringtie
+        path "${sample_id}/${sample_id}.gff", emit: stringtie_gtf // Path to the output gtf of stringtie
 
     script:
         // Check if reads are unstranded and exit if they are
@@ -38,7 +38,7 @@ process stringtie {
             -s 99999 \
             -p ${task.cpus} \
             ${chromosome_exclusion} \
-            -o "${sample_id}/${sample_id}.gtf"
+            -o "${sample_id}/${sample_id}.gff"
         """
 }
 
@@ -47,8 +47,8 @@ process stringtie_summary {
 
     input:
         path gtf_list    
-        val reference_gtf
-        val outdir
+        path reference_gtf
+        path outdir
 
     output:
         path "all_samples_stringtie_counts_mqc.tsv", emit: stringtie_multiqc
@@ -56,20 +56,13 @@ process stringtie_summary {
     script:
         """
         OUT="all_samples_stringtie_counts_mqc.tsv"
-        echo -e "Sample\tGenes\tTranscripts\tExons\tKnown_transcripts\tNovel_transcripts" >> "\$OUT"
+        echo -e "Sample\tTranscripts\tExons\tKnown_transcripts\tNovel_transcripts" >> "\$OUT"
 
         for GTF in ${gtf_list.join(' ')}; do
             # Extract sample_id from filename
             SAMPLE=\$(basename "\$GTF" .gtf)
 
             transcripts=\$(awk '\$3=="transcript"' "\$GTF" | wc -l)
-            genes=\$(awk -F'\t' '\$3=="transcript" {
-                split(\$9, a, /;/)
-                for (i in a) if (a[i] ~ /gene_id/) {
-                    gsub(/.*gene_id "|"/, "", a[i])
-                    print a[i]
-                }
-            }' "\$GTF" | sort -u | wc -l)
             exons=\$(awk '\$3=="exon"' "\$GTF" | wc -l)
 
             gffcompare -r "$reference_gtf" -o "\${SAMPLE}_gffcmp" "\$GTF"
@@ -79,7 +72,7 @@ process stringtie_summary {
             known=\$(grep 'class_code "[=c]"' "\$ann" | grep -c \$'\ttranscript\t')
             novel=\$((all - known))
 
-            echo -e "\$SAMPLE\t\$genes\t\$transcripts\t\$exons\t\$known\t\$novel" >> "\$OUT"
+            echo -e "\$SAMPLE\t\$transcripts\t\$exons\t\$known\t\$novel" >> "\$OUT"
         done
         """
 }
