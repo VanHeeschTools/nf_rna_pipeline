@@ -52,7 +52,8 @@ scripts_dir     <- args[7]
 gtf_refseq_basename <- if (length(args) >= 8) args[8] else NULL
 
 # Source additional required functions
-functions_file <- paste0(scripts_dir, "/filter_annotate_functions.R")
+#functions_file <- paste0(scripts_dir, "/filter_annotate_functions.R")
+functions_file <- "filter_annotate_functions.R"
 source(functions_file)
 
 
@@ -136,7 +137,7 @@ filterGTF <- function( novel_gtf_path, gtf_ref_path, tracking_file, min_occurren
   # FILTER: Remove mono-exonic transcripts
   mono_exonic_novel <- count_mono_exonics(gtf = novel_gtf_df)
   novel_gtf_df <- novel_gtf_df[!(novel_gtf_df$transcript_id %in% mono_exonic_novel$transcript_id), ]  
-  if (exit_if_empty(novel_gtf_df, gtf_ref_df, output_gtf_path, script_version, script_date)) {
+  if (exit_if_empty(novel_gtf_df, gtf_ref_df, output_prefix, script_version, script_date)) {
     return()
   }
   

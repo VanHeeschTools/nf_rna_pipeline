@@ -424,17 +424,15 @@ fill_metadata_from_transcripts <- function(gtf_df, fields_to_fill) {
 #' @return The input data.frame with updated `gene_id` and `gene_name`.
 update_gene_id_and_name <- function(gtf_df) {
   gtf_df$gene_id <- ifelse(
-    gtf_df$ref_gene_id != "-" & is.na(gtf_df$cmp_ref_gene),
+    gtf_df$ref_gene_id != "-" & !is.na(gtf_df$ref_gene_id) & is.na(gtf_df$cmp_ref_gene) ,
     gtf_df$ref_gene_id,
     gtf_df$gene_id
   )
-  
   gtf_df$gene_name <- ifelse(
     is.na(gtf_df$gene_name),
     gtf_df$gene_id,
     gtf_df$gene_name
   )
-  
   return(gtf_df)
 }
 
