@@ -1,6 +1,6 @@
 process starAlignChimeric {
     label "fusions"
-    publishDir "${outdir}/arriba/${sample_id}/star", mode: 'copy', pattern: "${sample_id}*.out*"
+    //publishDir "${outdir}/arriba/${sample_id}/star", mode: 'copy', pattern: "${sample_id}*.out*"
 
     input:
         tuple val(sample_id), path(reads)
@@ -35,7 +35,9 @@ process starAlignChimeric {
             --chimScoreJunctionNonGTAG 0 \
             --chimScoreSeparation 1 \
             --chimSegmentReadGapMax 3 \
-            --chimMultimapNmax 50
+            --chimMultimapNmax 50 \
+            --outTmpDir /tmp/star_tmp/
+
             """
         } else {
             error  "`--fusions` not supported when `--paired_end false`"
@@ -44,7 +46,7 @@ process starAlignChimeric {
 
 process runArriba{
     label "fusions"
-    publishDir "${outdir}/arriba/${sample_id}", mode: 'copy', pattern: "${sample_id}_fusions*"
+    //publishDir "${outdir}/arriba/${sample_id}", mode: 'copy', pattern: "${sample_id}_fusions*"
 
     input:
         tuple val(sample_id), path(bam), path(vcf)

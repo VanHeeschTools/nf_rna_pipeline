@@ -40,7 +40,7 @@ process indexLength{
 // Define process for alignment with STAR
 process STAR {
     label "alignment"
-    publishDir "${outdir}/star/", mode: 'copy'
+    //publishDir "${outdir}/star/", mode: 'copy'
 
     input: 
         tuple val(sample_id), path(reads) // Tuple containing sample id and read paths
@@ -67,7 +67,7 @@ process STAR {
                         "--outSAMstrandField intronMotif --outSAMtype BAM Unsorted " +
                         "--outFilterMismatchNmax 6 --outTmpKeep None " +
                         "--alignSJoverhangMin 10 --outFilterMultimapNmax 10 " +
-                        "--outFilterScoreMinOverLread 0.75"
+                        "--outFilterScoreMinOverLread 0.75" 
 
         def bam = "${sample_id}.Aligned.out.bam"
         def new_bam = "${sample_id}.Aligned.sortedByCoord.out.bam"
@@ -90,7 +90,9 @@ process STAR {
         ${star_input} \
         --outSAMattrRGline ID:${sample_id} LB:${sample_id} PL:IllUMINA SM:${sample_id} \
         --outFileNamePrefix "${sample_id}/${sample_id}." \
-        --runThreadN $task.cpus ${star_params}
+        --runThreadN $task.cpus ${star_params} \
+        --outTmpDir /tmp/star_tmp/
+
 
         # Sort BAM
         time samtools sort \

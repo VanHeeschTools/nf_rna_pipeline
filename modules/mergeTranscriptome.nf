@@ -1,7 +1,7 @@
 // Define process for GTF merging
 process mergeGTF {
     label "compareGTF"
-    publishDir "${outdir}/gffcompare", mode: 'copy'
+    //publishDir "${outdir}/gffcompare", mode: 'copy'
 
     input:
         path gtf_list         // List of previously created gtf files to be merged
@@ -36,7 +36,7 @@ process mergeGTF {
 // Define process for transcript filtering and annotation
 process filterAnnotate {
     label "assembly"
-    publishDir "${outdir}/customannotation/", mode: 'copy'
+    //publishDir "${outdir}/customannotation/", mode: 'copy'
 
     input:
         path reference_gtf   // Path to the input reference gtf file
@@ -75,7 +75,7 @@ process filterAnnotate {
 // Creates a fasta file of the transcript sequence using the reference fasta file and the transcriptome gtf
 process transcriptome_fasta {
     label "gffread"
-    publishDir "${outdir}/stringtie", mode: 'copy'
+    //publishDir "${outdir}/stringtie", mode: 'copy'
 
     input:
         path merged_filtered_gtf // Merged and filtered transcriptome file

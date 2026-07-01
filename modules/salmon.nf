@@ -17,7 +17,7 @@ process salmon_index {
 // Run Salmon quant mode
 process salmon_quasi {
     label "salmon"
-    publishDir "${outdir}/salmon", mode: 'copy', pattern: "${sample_id}/quant.sf"
+    //publishDir "${outdir}/salmon", mode: 'copy', pattern: "${sample_id}/quant.sf"
 
     input:
         tuple val(sample_id), path(reads)  // Tuple of sample id and input read file(s)
@@ -57,7 +57,7 @@ process salmon_quasi {
 // Create satistics table using the salmon output
 process salmon_tables {
     label "salmon_tables"
-    publishDir "${outdir}/salmon", mode: 'copy', pattern: "${prefix}*"
+    //publishDir "${outdir}/salmon", mode: 'copy', pattern: "${prefix}*"
 
     input:
         path quants, stageAs: "quants/*"
@@ -84,7 +84,7 @@ process salmon_tables {
 // Run featurecounts 
 process featurecounts {
     label "featurecounts"
-    publishDir "${outdir}/featurecounts", mode: 'copy'
+    //publishDir "${outdir}/featurecounts", mode: 'copy'
 
     input:
         tuple val(sample_id), val(strand), val(paired_end), path(bam) // Tuple of sample id and input read file(s)
