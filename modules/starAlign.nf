@@ -89,8 +89,7 @@ process STAR {
         ${star_input} \
         --outSAMattrRGline ID:${sample_id} LB:${sample_id} PL:IllUMINA SM:${sample_id} \
         --outFileNamePrefix "${sample_id}/${sample_id}." \
-        --runThreadN $task.cpus ${star_params} \
-        --outTmpDir /tmp/star_tmp/
+        --runThreadN $task.cpus ${star_params} 
 
 
         # Sort BAM
