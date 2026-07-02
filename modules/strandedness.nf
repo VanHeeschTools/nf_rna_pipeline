@@ -1,7 +1,6 @@
 // Define process for checking strandedness
 process checkStrand {
     label "qc"
-    //publishDir "${outdir}/check_strandedness", mode: 'copy'
 
     input:
         tuple val(sample_id), path(reads) // Tuple containing sample id and read paths

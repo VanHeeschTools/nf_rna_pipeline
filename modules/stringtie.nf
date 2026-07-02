@@ -1,7 +1,6 @@
 // Define process for stringtie
 process stringtie {
     label "assembly"
-    //publishDir "${outdir}/stringtie", mode: 'copy'
 
     input:
         tuple val(sample_id), val(stringtie), path(bam), val(paired) // Tuple of sample id and star result bam

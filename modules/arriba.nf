@@ -1,6 +1,5 @@
 process starAlignChimeric {
     label "fusions"
-    //publishDir "${outdir}/arriba/${sample_id}/star", mode: 'copy', pattern: "${sample_id}*.out*"
 
     input:
         tuple val(sample_id), path(reads)
@@ -46,7 +45,6 @@ process starAlignChimeric {
 
 process runArriba{
     label "fusions"
-    //publishDir "${outdir}/arriba/${sample_id}", mode: 'copy', pattern: "${sample_id}_fusions*"
 
     input:
         tuple val(sample_id), path(bam), path(vcf)

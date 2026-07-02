@@ -1,6 +1,5 @@
 process MULTIQC {
     label "multiqc"
-    //publishDir "${outdir}/multiqc/", mode: 'copy'
 
     input:
         path multiqc_files, stageAs: "?/*"

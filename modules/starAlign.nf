@@ -40,7 +40,6 @@ process indexLength{
 // Define process for alignment with STAR
 process STAR {
     label "alignment"
-    //publishDir "${outdir}/star/", mode: 'copy'
 
     input: 
         tuple val(sample_id), path(reads) // Tuple containing sample id and read paths
