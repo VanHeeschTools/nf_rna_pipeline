@@ -78,6 +78,7 @@ process STAR {
             // Set single-end input parameter
             star_input = """--readFilesIn "${reads}" """
         }
+        def star_tmp = task.ext.star_tmp ?: ""
         
         """
         mkdir -p ${sample_id}
@@ -89,7 +90,8 @@ process STAR {
         ${star_input} \
         --outSAMattrRGline ID:${sample_id} LB:${sample_id} PL:IllUMINA SM:${sample_id} \
         --outFileNamePrefix "${sample_id}/${sample_id}." \
-        --runThreadN $task.cpus ${star_params} 
+        --runThreadN $task.cpus ${star_params} \
+        ${star_tmp}  
 
 
         # Sort BAM
