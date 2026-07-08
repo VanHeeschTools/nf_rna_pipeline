@@ -15,7 +15,6 @@ workflow EXPRESSION {
     transcriptome   // Path to the input transcriptome file
     reference_gtf   // Path to the input reference gtf file
     output_basename // File prefix given to the salmon_tables results
-    outdir          // Path to output directory
 
     main:
 
@@ -37,14 +36,14 @@ workflow EXPRESSION {
         salmon_index(input_transcriptome)
 
         // Run salmon and write paths of quant.sf output files to a text file
-        salmon_quasi(reads, paired_end, salmon_index.out, outdir)
+        salmon_quasi(reads, paired_end, salmon_index.out)
 
 
         // Write the paths of the salmon_quasi output files to a text file
         ch_quants = salmon_quasi.out.quant.collect()
 
         // Run the salmon_tables Rscript to obtain expression tables
-        salmon_tables(ch_quants, input_gtf, output_basename, outdir)
+        salmon_tables(ch_quants, input_gtf, output_basename)
         salmon_multiqc = salmon_tables.out.salmon_multiqc
     }
 
@@ -53,7 +52,7 @@ workflow EXPRESSION {
     
     if (mode =~ /.*fc.*/){
         print("Running featurecounts for expression quantification")
-        featurecounts(featurecounts_input, input_gtf, outdir)
+        featurecounts(featurecounts_input, input_gtf)
     }
 
     emit:

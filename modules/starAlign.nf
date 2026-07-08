@@ -47,7 +47,6 @@ process STAR {
         val usedIndex                     // Val showing read length for the star index
         path reference_gtf                 // Input reference gtf file
         path star_index_basedir            // Path to star index dir
-        path outdir                        // Path to output directory
 
     output:
         //path "${sample_id}/${sample_id}.*"

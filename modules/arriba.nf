@@ -5,7 +5,6 @@ process starAlignChimeric {
         tuple val(sample_id), path(reads)
         val paired_end
         path reference
-        val outdir
 
     output:
         tuple val("${sample_id}"), path("${sample_id}.*.bam"), emit: bam
@@ -54,7 +53,6 @@ process runArriba{
         path blacklist
         path whitelist
         path protein_domains
-        path outdir
 
     output:
         path "${sample_id}_fusions*", emit: fusions

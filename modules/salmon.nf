@@ -22,7 +22,6 @@ process salmon_quasi {
         tuple val(sample_id), path(reads)  // Tuple of sample id and input read file(s)
         val paired_end                     // Bool, is data paired end or not
         path salmon_index                  // Path to the salmon index
-        val outdir                         // Path to the output directory
 
     output:
         //path "${sample_id}/quant.sf", emit: quant
@@ -61,7 +60,6 @@ process salmon_tables {
         path quants, stageAs: "quants/*"
         path gtf
         val prefix
-        val outdir
 
     output:
         path "${prefix}*"
@@ -86,7 +84,6 @@ process featurecounts {
     input:
         tuple val(sample_id), val(strand), val(paired_end), path(bam) // Tuple of sample id and input read file(s)
         path reference_gtf                                   // Path to the input reference gtf file
-        path outdir                                          // Path to output directory
 
     output:
         path "${sample_id}/*"

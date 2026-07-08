@@ -5,7 +5,6 @@ process fastp {
     input:
         tuple val(sample_id), path(reads) // Tuple of sample id and fastq read files
         val paired_end                    // Bool, true if data is paired end
-        val outdir                        // Path to outputdir
         val store_trimmed_reads         // Bool, true if trimmed reads need to be stored
 
     output:

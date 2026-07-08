@@ -9,7 +9,6 @@ workflow ALIGN {
     paired_end         // Bool, True if data is paired end
     reference_gtf      // Location of reference gtf
     star_index_basedir // Location of star index
-    outdir             // Location of output directory
 
     main:
     // Obtain read length to use correct star index
@@ -20,8 +19,8 @@ workflow ALIGN {
         paired_end,
         index_length,
         reference_gtf,
-        star_index_basedir,
-        outdir)
+        star_index_basedir
+        )
     
     // Sort star output using samtools
     //samtools(STAR.out.sorted_bam, outdir)

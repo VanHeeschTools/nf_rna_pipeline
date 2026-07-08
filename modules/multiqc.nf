@@ -4,7 +4,6 @@ process MULTIQC {
     input:
         path multiqc_files, stageAs: "?/*"
         path multiqc_config
-        path outdir
 
     output:
         path "*multiqc_report.html", emit: multiqc_report

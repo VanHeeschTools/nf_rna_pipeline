@@ -7,7 +7,6 @@ process mergeGTF {
         path masked_fasta      // Path to input reference fasta file
         path reference_gtf     // Path to input reference gtf file
         val output_basename   // Val containing the id/name given to the output files
-        path outdir            // Path to output directory
 
     output:
         path "${output_basename}*"
@@ -45,7 +44,6 @@ process filterAnnotate {
         val min_tpm         // Val containing the minium tpm of transcripts for filtering
         val output_basename // Val containing output basename
         path scripts_dir     // Path location of input R scripts
-        path outdir          // Path to output directory
         path "filter_annotate.R"
         path "filter_annotate_functions.R"
 
@@ -77,7 +75,6 @@ process transcriptome_fasta {
     input:
         path merged_filtered_gtf // Merged and filtered transcriptome file
         path masked_fasta        // Path to input reference fasta file
-        path outdir              // Path to output directory
 
     output:
         file "stringtie_transcriptome.fa"

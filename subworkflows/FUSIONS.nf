@@ -6,7 +6,6 @@ workflow FUSIONS {
     vcf               // Tuple: (sample_id, vcf) or (sample_id, null) if no vcf available
     paired_end        // Channel bool, paired end or not
     arriba_reference  // Path arriba reference location
-    outdir            // Path to output dir
 
     main:
     // Location to the Arriba reference
@@ -30,7 +29,7 @@ workflow FUSIONS {
     }
 
     // Run star mapper
-    starAlignChimeric(reads, paired_end, arriba_reference, outdir)
+    starAlignChimeric(reads, paired_end, arriba_reference)
     arriba_input = starAlignChimeric.out.bam.join(ch_vcf_cleaned)
 
     // Run Arriba
@@ -40,7 +39,6 @@ workflow FUSIONS {
         gtf,
         blacklist, 
         whitelist, 
-        protein_domains, 
-        outdir
+        protein_domains
     )
 }

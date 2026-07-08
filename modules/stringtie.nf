@@ -6,7 +6,6 @@ process stringtie {
         tuple val(sample_id), val(stringtie), path(bam), val(paired) // Tuple of sample id and star result bam
         val chr                                         // Chromosome exclusion list 
         path reference_gtf                               // Reference gtf file location
-        path outdir                                      // Path to output directory
 
     output:
         path "${sample_id}/${sample_id}.gff", emit: stringtie_gtf // Path to the output gtf of stringtie
@@ -47,7 +46,6 @@ process stringtie_summary {
     input:
         path gtf_list    
         path reference_gtf
-        path outdir
 
     output:
         path "all_samples_stringtie_counts_mqc.tsv", emit: stringtie_multiqc

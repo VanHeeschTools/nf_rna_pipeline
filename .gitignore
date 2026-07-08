@@ -26,6 +26,7 @@ work/*
 .nextflow.*
 .nfs*
 .nextflow/
+.vscode
 
 #Ignore dev files
 schema_cache_id.txt
