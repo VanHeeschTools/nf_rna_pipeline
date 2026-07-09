@@ -21,15 +21,9 @@ workflow ALIGN {
         reference_gtf,
         star_index_basedir
         )
-    
-    // Sort star output using samtools
-    //samtools(STAR.out.sorted_bam, outdir)
-    bam = STAR.out.sorted_bam
-    star_log = STAR.out.star_log_final
-    samtools_stats = STAR.out.samtools_stats
-
+        
     emit:
-    bam            // Tuple of sample id and sorted bam file
-    star_log       // Log file of star for multiqc
-    samtools_stats // Statistics file of bam output for multiqc
+    bam             = STAR.out.sorted_bam           // Tuple of sample id and sorted bam file
+    star_log        = STAR.out.star_log_final       // Log file of star for multiqc
+    samtools_stats  = STAR.out.samtools_stats       // Statistics file of bam output for multiqc
 }

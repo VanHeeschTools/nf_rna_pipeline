@@ -15,8 +15,7 @@ workflow QC {
 
     main:
     // Run fastp and sets the output fastq file to variable trimmed_reads
-    trimmed_reads = fastp(reads, paired_end, store_trimmed_reads).fastq_files
-    fastp_json = fastp.out.fastp_json
+    fastp(reads, paired_end, store_trimmed_reads)
 
     // Run strandedness
     if (paired_end_check == true){
@@ -43,7 +42,7 @@ workflow QC {
 
     emit:
     strandedness  // File, strandedness of the data
-    trimmed_reads // Tuple, sample and trimmed fastq files
-    fastp_json    // Fastp stats
+    trimmed_reads   = fastp.out.fastq_files   // Tuple, sample and trimmed fastq files
+    fastp_json      = fastp.out.fastp_json    // Fastp stats
     strand_file   // Text file containing the strandeness of all input samples
 }
