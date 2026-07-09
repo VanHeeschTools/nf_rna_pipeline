@@ -40,15 +40,13 @@ process indexLength{
 // Define process for alignment with STAR
 process STAR {
     label "alignment"
-    publishDir "${outdir}/star/", mode: 'copy'
 
     input: 
         tuple val(sample_id), path(reads) // Tuple containing sample id and read paths
         val paired_end                    // Bool set to true if input reads are paired end
         val usedIndex                     // Val showing read length for the star index
-        val reference_gtf                 // Input reference gtf file
-        val star_index_basedir            // Path to star index dir
-        val outdir                        // Path to output directory
+        path reference_gtf                 // Input reference gtf file
+        path star_index_basedir            // Path to star index dir
 
     output:
         //path "${sample_id}/${sample_id}.*"
@@ -67,7 +65,7 @@ process STAR {
                         "--outSAMstrandField intronMotif --outSAMtype BAM Unsorted " +
                         "--outFilterMismatchNmax 6 --outTmpKeep None " +
                         "--alignSJoverhangMin 10 --outFilterMultimapNmax 10 " +
-                        "--outFilterScoreMinOverLread 0.75"
+                        "--outFilterScoreMinOverLread 0.75" 
 
         def bam = "${sample_id}.Aligned.out.bam"
         def new_bam = "${sample_id}.Aligned.sortedByCoord.out.bam"
@@ -79,6 +77,7 @@ process STAR {
             // Set single-end input parameter
             star_input = """--readFilesIn "${reads}" """
         }
+        def star_tmp = task.ext.star_tmp ?: ""
         
         """
         mkdir -p ${sample_id}
@@ -90,7 +89,9 @@ process STAR {
         ${star_input} \
         --outSAMattrRGline ID:${sample_id} LB:${sample_id} PL:IllUMINA SM:${sample_id} \
         --outFileNamePrefix "${sample_id}/${sample_id}." \
-        --runThreadN $task.cpus ${star_params}
+        --runThreadN $task.cpus ${star_params} \
+        ${star_tmp}  
+
 
         # Sort BAM
         time samtools sort \

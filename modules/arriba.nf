@@ -1,12 +1,10 @@
 process starAlignChimeric {
     label "fusions"
-    publishDir "${outdir}/arriba/${sample_id}/star", mode: 'copy', pattern: "${sample_id}*.out*"
 
     input:
         tuple val(sample_id), path(reads)
         val paired_end
         path reference
-        val outdir
 
     output:
         tuple val("${sample_id}"), path("${sample_id}.*.bam"), emit: bam
@@ -35,7 +33,9 @@ process starAlignChimeric {
             --chimScoreJunctionNonGTAG 0 \
             --chimScoreSeparation 1 \
             --chimSegmentReadGapMax 3 \
-            --chimMultimapNmax 50
+            --chimMultimapNmax 50 \
+            --outTmpDir /tmp/star_tmp/
+
             """
         } else {
             error  "`--fusions` not supported when `--paired_end false`"
@@ -44,25 +44,25 @@ process starAlignChimeric {
 
 process runArriba{
     label "fusions"
-    publishDir "${outdir}/arriba/${sample_id}", mode: 'copy', pattern: "${sample_id}_fusions*"
 
     input:
-        tuple val(sample_id), val(bam), val(vcf)
-        val fa
-        val gtf
-        val blacklist
-        val whitelist
-        val protein_domains
-        val outdir
+        tuple val(sample_id), path(bam), path(vcf)
+        path fa
+        path fai
+        path gtf
+        path blacklist
+        path whitelist
+        path protein_domains
 
     output:
         path "${sample_id}_fusions*", emit: fusions
 
     script:
-        def blacklist_options = blacklist.toString().contains("EMPTY") ?  "-f blacklist" : "-b ${blacklist}"
-        def whitelist_options = whitelist.toString().contains("EMPTY") ? "" : "-k ${whitelist} -t ${whitelist}"
-        def domains_options = protein_domains.toString().contains("EMPTY") ? "" : "-p ${protein_domains}"
-        def wgs_options = (vcf == null) ? "" : "-d ${vcf}"
+        // If blacklist is [], this evaluates to false
+        def blacklist_options = blacklist ? "-b ${blacklist}" : "-f blacklist"
+        def whitelist_options = whitelist ? "-k ${whitelist} -t ${whitelist}" : ""
+        def domains_options   = protein_domains ? "-p ${protein_domains}" : ""
+        def wgs_options       = vcf ? "-d ${vcf}" : ""
 
         """
         mkdir -p ${sample_id}/

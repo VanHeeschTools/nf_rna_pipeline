@@ -11,17 +11,15 @@ workflow QC {
     kallisto_index            // Path to the kallisto index file
     reference_gtf             // Path to the reference gtf 
     strandedness_check        // Val, number of reads to use for strandedness check
-    outdir                    // Path to output dir
     store_trimmed_reads       // Bool, true if trimmed reads need to be stored
 
     main:
     // Run fastp and sets the output fastq file to variable trimmed_reads
-    trimmed_reads = fastp(reads, paired_end, outdir, store_trimmed_reads).fastq_files
-    fastp_json = fastp.out.fastp_json
+    fastp(reads, paired_end, store_trimmed_reads)
 
     // Run strandedness
     if (paired_end_check == true){
-        strand = checkStrand(reads, kallisto_index, reference_gtf, strandedness_check, outdir).strand
+        strand = checkStrand(reads, kallisto_index, reference_gtf, strandedness_check).strand
         
         // Map strand info to strandedness format used downstream
         strandedness = strand.map{ it -> getStrandtype(it) }
@@ -32,7 +30,7 @@ workflow QC {
         .map { tup -> "${tup[0]}\t${tup[1]}" }
         .collectFile(
             name: 'strandedness_all.txt',
-            storeDir: "${outdir}/check_strandedness/",
+            storeDir: "${params.outdir}/check_strandedness/",
             newLine: true,
             sort: true
         )
@@ -44,7 +42,7 @@ workflow QC {
 
     emit:
     strandedness  // File, strandedness of the data
-    trimmed_reads // Tuple, sample and trimmed fastq files
-    fastp_json    // Fastp stats
+    trimmed_reads   = fastp.out.fastq_files   // Tuple, sample and trimmed fastq files
+    fastp_json      = fastp.out.fastp_json    // Fastp stats
     strand_file   // Text file containing the strandeness of all input samples
 }

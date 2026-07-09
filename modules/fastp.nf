@@ -1,21 +1,10 @@
 // Define process for trimming and quality control (fastp)
 process fastp {
     label "qc"
-    // Always publish the fastp report
-    publishDir "${outdir}", mode: 'copy', saveAs: { filename ->
-        if (filename.endsWith('_fastp_report.json')) {
-            return filename  // Always save reports
-        } else if (filename.endsWith('_trimmed.fastq.gz') && store_trimmed_reads) {
-            return filename  // Only save trimmed reads if flag is true
-        } else {
-            return null      // Don't save other files
-        }
-    }
 
     input:
         tuple val(sample_id), path(reads) // Tuple of sample id and fastq read files
         val paired_end                    // Bool, true if data is paired end
-        val outdir                        // Path to outputdir
         val store_trimmed_reads         // Bool, true if trimmed reads need to be stored
 
     output:

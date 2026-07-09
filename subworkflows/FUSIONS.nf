@@ -6,38 +6,39 @@ workflow FUSIONS {
     vcf               // Tuple: (sample_id, vcf) or (sample_id, null) if no vcf available
     paired_end        // Channel bool, paired end or not
     arriba_reference  // Path arriba reference location
-    outdir            // Path to output dir
 
     main:
     // Location to the Arriba reference
-    reference = channel.fromPath("${arriba_reference}**")
+    def ref_files = file("${arriba_reference}/**")
 
     // Check if both fasta and index exists for Arriba reference 
-    fa = channel.fromPath("${arriba_reference}**.fa", checkIfExists: true).first()
-    channel.fromPath("${arriba_reference}**.fa.fai", checkIfExists: true).first()
-
-    // Get gtf from the reference folder
-    gtf = reference.filter(~/.*\.gtf/).first()
+    def fa  = ref_files.find { it.name.endsWith('viral.fa') }
+    def fai  = ref_files.find { it.name.endsWith('.fai') }
+    //fa_with_index = [ fa, file("${fa}.fai") ]
+    def gtf = ref_files.find { it.name.endsWith('.gtf') }
 
     // Take optional files and passing empty file if empty
-    blacklist = reference.filter(~/.*blacklist.*/).ifEmpty{ file("EMPTY_BLACKLIST")}.first()
-    whitelist = reference.filter(~/.*known_fusions.*/).ifEmpty{ file("EMTPY_WHITELIST")}.first()
-    protein_domains = reference.filter(~/.*protein_domains.*/).ifEmpty{ file("EMPTY_DOMAINS")}.first()
+    def blacklist       = ref_files.find { it.name.contains('blacklist') } ?: []
+    def whitelist       = ref_files.find { it.name.contains('known_fusions') } ?: []
+    def protein_domains = ref_files.find { it.name.contains('protein_domains') } ?: []
+
+    ch_vcf_cleaned = vcf.map { it -> 
+        def meta = it[0]
+        def vcf_file = it[1] ?: [] 
+        return [meta, vcf_file]
+    }
 
     // Run star mapper
-    starAlignChimeric(reads, paired_end, arriba_reference, outdir)
-    fusion_bam = starAlignChimeric.out.bam
-
-    arriba_input = fusion_bam
-                    .join(vcf)
+    starAlignChimeric(reads, paired_end, arriba_reference)
+    arriba_input = starAlignChimeric.out.bam.join(ch_vcf_cleaned)
 
     // Run Arriba
     runArriba(arriba_input, 
-        fa, 
+        fa,
+        fai, 
         gtf,
         blacklist, 
         whitelist, 
-        protein_domains, 
-        outdir
+        protein_domains
     )
 }

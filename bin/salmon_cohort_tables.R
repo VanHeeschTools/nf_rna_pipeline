@@ -287,11 +287,5 @@ write.table(multiqc_table,
             col.names = TRUE,
             quote = FALSE)
 
-# Copy TPMs
-tpm_filtered <- as.data.frame(txi$abundance)
-# Replace low values with NA
-tpm_filtered[tpm_filtered < 1] <- NA
-# Write outputs
-readr::write_tsv(tpm_filtered, paste0(prefix, "_transcript_tpms_mqc.tsv"), col_names = TRUE)
 
 

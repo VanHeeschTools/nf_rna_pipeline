@@ -83,7 +83,6 @@ workflow RNASEQ {
         params.kallisto_index,
         params.reference_gtf,
         params.strandedness_check,
-        params.outdir,
         params.store_trimmed_reads)
         
         star_input = QC.out.trimmed_reads
@@ -139,7 +138,7 @@ workflow RNASEQ {
     *Step 02: Align
     */
     if (run_align){
-        ALIGN(star_input, paired_end, params.reference_gtf, params.star_index_basedir, params.outdir)
+        ALIGN(star_input, paired_end, params.reference_gtf, params.star_index_basedir)
         bam = ALIGN.out.bam
         multiqc_files = multiqc_files.mix(ALIGN.out.star_log)
         multiqc_files = multiqc_files.mix(ALIGN.out.samtools_stats)
@@ -178,8 +177,7 @@ workflow RNASEQ {
                 params.masked_fasta,
                 params.output_basename,
                 params.min_occurrence,
-                params.min_tpm,
-                params.outdir)
+                params.min_tpm )
 
         assembled_gtf = ASSEMBLY.out.merged_filtered_gtf
         assembled_fasta = ASSEMBLY.out.assembled_transcriptome_fasta
@@ -198,8 +196,7 @@ workflow RNASEQ {
         FUSIONS(star_input,
             vcfs,
             paired_end,
-            params.arriba_reference,
-            params.outdir)
+            params.arriba_reference)
     }
 
     /*
@@ -228,10 +225,8 @@ workflow RNASEQ {
             paired_end_check,
             params.reference_transcriptome,
             params.reference_gtf,
-            params.output_basename,
-            params.outdir)
+            params.output_basename)
         multiqc_files = multiqc_files.mix(EXPRESSION.out.salmon_multiqc)
-        multiqc_files = multiqc_files.mix(EXPRESSION.out.salmon_tpm)
     }
 
     /*
@@ -242,6 +237,6 @@ workflow RNASEQ {
     * Step 07: MultiQC
     */
     multiqc_config_file = file("${projectDir}/${params.multiqc_config}")
-    MULTIQC (multiqc_files.collect(), multiqc_config_file, params.outdir) 
+    MULTIQC (multiqc_files.collect(), multiqc_config_file) 
 }
 

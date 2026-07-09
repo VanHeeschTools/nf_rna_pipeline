@@ -12,7 +12,6 @@ workflow ASSEMBLY {
     output_basename    // Val containing the id/name given to the output files
     min_occurrence     // Val contatining the minimum occurence of transcripts for filtering
     min_tpm            // Val containing the minium tpm of transcripts for filtering
-    outdir             // Path to output directory
 
     main:
     // Run stringtie unless paths to precomputed individual sample GTF are provided
@@ -27,30 +26,15 @@ workflow ASSEMBLY {
         }
 
         // Run stringtie
-        stringtie(stringtie_input, chromosome_exclusion_list, reference_gtf, outdir)
+        stringtie(stringtie_input, chromosome_exclusion_list, reference_gtf)
 
         stringtie_summary(stringtie.out.stringtie_gtf.collect(),
-                        reference_gtf,
-                        outdir)
+                        reference_gtf)
 
         stringtie_multiqc = stringtie_summary.out.stringtie_multiqc
 
-        // Wait untill all stringtie runs are completed
-        gtf_paths = stringtie.out.collect().flatten()
-                    .map { it -> it.toString() } // Change paths to strings
-
-        // Store gtflist in outputdir
-        // Replace the work dir path with the output dir
-        gtf_paths.map { it -> it.replaceFirst("${workDir}/[^/]*/[^/]*/", "${outdir}/stringtie/") } 
-            .collectFile(
-                name: 'gtflist.txt',
-                storeDir: "${outdir}/stringtie/",
-                newLine: true, sort: true )
-
-        // Store gtflist to workdir
-        gtf_list = gtf_paths.collectFile(
-            name: 'gtflist.txt',
-            newLine: true, sort: true )
+        // Collect GTF files and create a list file
+        gtf_list = stringtie.out.stringtie_gtf.collect()
     } else {
         stringtie_multiqc = null
     }
@@ -68,26 +52,29 @@ workflow ASSEMBLY {
         }
 
         // Run merge process
-        mergeGTF(gtf_list, masked_fasta, reference_gtf, output_basename, outdir)
+        mergeGTF(gtf_list, masked_fasta, reference_gtf, output_basename)
 
         gtf_novel = mergeGTF.out.merged_gtf
         gtf_tracking = mergeGTF.out.tracking
 
+        refseq_input = refseq_gtf ? file("${refseq_gtf}*.gff") : []
+
         // Run filter annotate r script
         // TODO: Sort exons in gtf and add transcript biotype for stringtie tx
         filterAnnotate( reference_gtf,
-                        refseq_gtf ?: "",
+                        refseq_input,
                         gtf_novel,
                         gtf_tracking,
                         min_occurrence,
                         min_tpm,
                         output_basename,
                         "${projectDir}/bin/",
-                        outdir)
+                        file("${projectDir}/bin/filter_annotate.R"),
+                        file("${projectDir}/bin/filter_annotate_functions.R"))
 
         merged_filtered_gtf = filterAnnotate.out.gtf
 
-        transcriptome_fasta(merged_filtered_gtf, masked_fasta, outdir)
+        transcriptome_fasta(merged_filtered_gtf, masked_fasta)
         assembled_transcriptome_fasta = transcriptome_fasta.out
     } else {
         merged_filtered_gtf = null
