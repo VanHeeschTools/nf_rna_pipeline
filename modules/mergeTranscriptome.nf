@@ -27,6 +27,11 @@ process mergeGTF {
             -o "${output_basename}" \
             -i gtflist.txt
 
+        # If the combined file wasn't created, find the single evaluated GTF and rename it
+        if [ ! -f "${output_basename}.combined.gtf" ]; then
+            echo "Single file detected. Creating fallback combined.gtf..."
+            cp ${output_basename}.*.gtf ${output_basename}.combined.gtf
+        fi
         """
 }
 
