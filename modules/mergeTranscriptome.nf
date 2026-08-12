@@ -41,21 +41,25 @@ process filterAnnotate {
     label "assembly"
 
     input:
-        path reference_gtf   // Path to the input reference gtf file
-        path refseq_files      // Path to input refseq gtf file
+        path reference_gtf  // Path to the input reference gtf file
+        path refseq_files   // Path to input refseq gtf file
         path gtf_novel      // Path to the merged gtf file
         path gtf_tracking   // Path to the tracking file created by the merge step
         val min_occurrence  // Val contatining the minimum occurence of transcripts for filtering
         val min_tpm         // Val containing the minium tpm of transcripts for filtering
         val output_basename // Val containing output basename
-        path scripts_dir     // Path location of input R scripts
+        path scripts_dir    // Path location of input R scripts
         path "filter_annotate.R"
         path "filter_annotate_functions.R"
 
     output:
-        path "${output_basename}_novel_filtered.gtf", emit: gtf
-        path "${output_basename}_novel_filtered.log"
-        path "${output_basename}_novel_filtered.tsv"
+        path "${output_basename}.extended_reference.gtf", emit: gtf
+        path "${output_basename}.novel_transcripts.gtf", emit: gtf_novel
+        path "${output_basename}.log"
+        path "${output_basename}.tsv"
+
+    when:
+        task.ext.when == null || task.ext.when
 
     script:
 	def refseq_prefix = refseq_files ? refseq_files[0].name.replace(".xr.gff", "").replace(".nr.gff", "") : ""
@@ -67,7 +71,7 @@ process filterAnnotate {
         "${gtf_tracking}" \
         "${min_occurrence}" \
         "${min_tpm}" \
-        "${output_basename}_novel_filtered" \
+        "${output_basename}" \
         "${scripts_dir}" \
         ${refseq_arg}
         """
@@ -88,4 +92,87 @@ process transcriptome_fasta {
         """
         gffread -w stringtie_transcriptome.fa -g ${masked_fasta} ${merged_filtered_gtf}
         """
+}
+
+
+process select_lr_novel_records {
+    label "salmon_tables"
+
+    input:
+        path longread_gtf
+
+    output:
+        path "lr_novel.transcript_records.gtf", emit: lr_novel_gtf
+
+    when:
+        task.ext.when == null || task.ext.when
+
+    script:
+    """
+    #!/usr/bin/env Rscript
+    library(rtracklayer)
+
+    gtf <- import("${longread_gtf}")
+    keep_ids <- unique(gtf\$transcript_id[!is.na(gtf\$transcript_evidence) &
+                                        gtf\$transcript_evidence == "LR_novel"])
+    export(gtf[gtf\$transcript_id %in% keep_ids], "lr_novel.transcript_records.gtf")
+    """
+}
+
+process trmap{
+    label "compareGTF"
+
+    input:
+        path merged_filtered_novel_gtf
+        path lr_novel_gtf
+    
+    output:
+        path "trmap_sr_vs_lr.out", emit: trmap_out_file
+        path "trmap_sr_vs_lr.tab", emit: trmap_tab_file
+
+    when:
+        task.ext.when == null || task.ext.when
+
+    script:
+        """
+        trmap -o "trmap_sr_vs_lr.out" \
+                "${merged_filtered_novel_gtf}" \
+                "${lr_novel_gtf}"
+
+        trmap -T -o "trmap_sr_vs_lr.tab" \
+                "${merged_filtered_novel_gtf}" \
+                "${lr_novel_gtf}"
+        """
+}
+
+process lr_sr_combine_transcriptome{
+    debug true  
+    label "salmon_tables"
+
+    input:
+        path sr_gtf_file
+        path lr_gtf_file
+        path trmap_out_file
+        path trmap_tab_file
+        val min_occurrence
+        path "filter_annotate_functions.R"
+    
+    output:
+        path "rms_unified_lr_sr_novel.gtf"
+        path "rms_unified_lr_sr.gtf"
+    
+    when:
+        task.ext.when == null || task.ext.when
+
+    script:
+        """
+        lr_sr_combine_transcriptomes_trmap.R \
+            "${sr_gtf_file}" \
+            "${lr_gtf_file}" \
+            "${trmap_out_file}" \
+            "${trmap_tab_file}" \
+            "." \
+            "${min_occurrence}" \
+        """
+
 }

@@ -1,5 +1,5 @@
 include { stringtie; stringtie_summary } from '../modules/stringtie'
-include { mergeGTF; filterAnnotate; transcriptome_fasta } from '../modules/mergeTranscriptome'
+include { mergeGTF; filterAnnotate; transcriptome_fasta; select_lr_novel_records; trmap; lr_sr_combine_transcriptome; } from '../modules/mergeTranscriptome'
 
 workflow ASSEMBLY {
     take:
@@ -12,6 +12,7 @@ workflow ASSEMBLY {
     output_basename    // Val containing the id/name given to the output files
     min_occurrence     // Val contatining the minimum occurence of transcripts for filtering
     min_tpm            // Val containing the minium tpm of transcripts for filtering
+    longread_gtf
 
     main:
     // Run stringtie unless paths to precomputed individual sample GTF are provided
@@ -54,18 +55,24 @@ workflow ASSEMBLY {
         // Run merge process
         mergeGTF(gtf_list, masked_fasta, reference_gtf, output_basename)
 
-        gtf_novel = mergeGTF.out.merged_gtf
+        gtf_merged = mergeGTF.out.merged_gtf
         gtf_tracking = mergeGTF.out.tracking
 
         refseq_input = refseq_gtf ? file("${refseq_gtf}*.gff") : []
 
         // Run filter annotate r script
         // TODO: Sort exons in gtf and add transcript biotype for stringtie tx
+        if (longread_gtf) {
+            filter_annotate_min_occurence = 1
+        } else{
+            filter_annotate_min_occurence = min_occurrence
+        }
+
         filterAnnotate( reference_gtf,
                         refseq_input,
-                        gtf_novel,
+                        gtf_merged,
                         gtf_tracking,
-                        min_occurrence,
+                        filter_annotate_min_occurence,
                         min_tpm,
                         output_basename,
                         "${projectDir}/bin/",
@@ -73,6 +80,22 @@ workflow ASSEMBLY {
                         file("${projectDir}/bin/filter_annotate_functions.R"))
 
         merged_filtered_gtf = filterAnnotate.out.gtf
+
+        if (longread_gtf){
+            // Filter long read gtf to obtain only novel transcripts
+            select_lr_novel_records(longread_gtf)
+            // Overlap long read novel transcripts to short read novel transcripts
+            trmap(filterAnnotate.out.gtf_novel, select_lr_novel_records.out.lr_novel_gtf)
+            // Combine long-read and short-read transcriptoem
+            lr_sr_combine_transcriptome(
+                filterAnnotate.out.gtf,
+                params.longread_gtf,
+                trmap.out.trmap_out_file,
+                trmap.out.trmap_tab_file,
+                min_occurrence,
+                file("${projectDir}/bin/filter_annotate_functions.R")
+            )
+        }
 
         transcriptome_fasta(merged_filtered_gtf, masked_fasta)
         assembled_transcriptome_fasta = transcriptome_fasta.out

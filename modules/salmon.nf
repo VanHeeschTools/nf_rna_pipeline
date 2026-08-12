@@ -64,21 +64,12 @@ process salmon_tables {
     output:
         path "${prefix}*"
         path "${prefix}_multiqc_summary_mqc.tsv", emit: salmon_multiqc
+
     script:
         """
-        # 1. Clear/Create the file
-        > quant_paths.txt
+        # Collect path of every *_quant.sf file and put in txt file
+        find \$(pwd)/quants -name "*_quant.sf" > quant_paths.txt
 
-        # 2. Check if quant.sf is sitting directly in the quants directory (Single file edge-case)
-        if [ -f "\$(pwd)/quants/quant.sf" ]; then
-            echo "\$(pwd)/quants" > quant_paths.txt
-        else
-            # Multi-file case: Find every directory that contains a quant.sf file
-            find \$(pwd)/quants -type f -name "quant.sf" -exec dirname {} \\; > quant_paths.txt
-        fi
-         
-        # 3. Fallback check: If R script expects the parent directory of the sample folders
-        # and not the sample folders themselves, we handle it. But let's check what's inside first:
         echo "=== Content of quant_paths.txt ==="
         cat quant_paths.txt
         echo "================================="

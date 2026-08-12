@@ -177,7 +177,8 @@ workflow RNASEQ {
                 params.masked_fasta,
                 params.output_basename,
                 params.min_occurrence,
-                params.min_tpm )
+                params.min_tpm,
+                params.longread_gtf)
 
         assembled_gtf = ASSEMBLY.out.merged_filtered_gtf
         assembled_fasta = ASSEMBLY.out.assembled_transcriptome_fasta
