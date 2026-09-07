@@ -722,8 +722,8 @@ unified_gr_novel <- makeGRangesFromDataFrame(
   keep.extra.columns = TRUE
 )
 
-output_gtf_path_novel <- file.path(qc_output, "rms_unified_lr_sr_novel.gtf")
-output_gtf_path <- file.path(qc_output, "rms_unified_lr_sr.gtf")
+output_gtf_path_novel <- file.path(qc_output, "unified_lr_sr_novel.gtf")
+output_gtf_path <- file.path(qc_output, "unified_lr_sr.gtf")
 
 ## Write GTF files using unified helper function
 write_gtf_with_header(unified_gr_novel, output_gtf_path_novel, gtf_header)

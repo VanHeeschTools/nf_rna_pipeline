@@ -158,8 +158,8 @@ process lr_sr_combine_transcriptome{
         path "filter_annotate_functions.R"
     
     output:
-        path "rms_unified_lr_sr_novel.gtf"
-        path "rms_unified_lr_sr.gtf"
+        path "unified_lr_sr_novel.gtf"
+        path "unified_lr_sr.gtf"
     
     when:
         task.ext.when == null || task.ext.when

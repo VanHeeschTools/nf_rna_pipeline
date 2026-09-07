@@ -34,7 +34,7 @@ process starAlignChimeric {
             --chimScoreSeparation 1 \
             --chimSegmentReadGapMax 3 \
             --chimMultimapNmax 50 \
-            --outTmpDir /tmp/star_tmp/
+            --outTmpDir star_tmp/
 
             """
         } else {
