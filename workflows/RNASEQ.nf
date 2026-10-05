@@ -1,5 +1,6 @@
 include { validateParameters; paramsSummaryLog; samplesheetToList; } from 'plugin/nf-schema'
 include { checkInputFiles; is_paired_end } from "../modules/helperFunctions.nf"
+include { PREPARE_READS } from '../subworkflows/PREPARE_READS'
 include { QC } from '../subworkflows/QC'
 include { ALIGN } from '../subworkflows/ALIGN'
 include { ASSEMBLY } from '../subworkflows/ASSEMBLY'
@@ -24,26 +25,31 @@ workflow RNASEQ {
     // Print summary of supplied parameters
     log.info paramsSummaryLog(workflow)
 
+    // Read samplesheet
+    samples = samplesheetToList(params.input, "assets/schema_input.json")
+
     // Validate files
-    checkInputFiles()
+    checkInputFiles(samples)
 
     // Check if input is paired_end or single end and prevent mixing
-    boolean paired_end_check = is_paired_end(params.input)
+    boolean paired_end_check = is_paired_end(samples)
     // Turn into channel to give to modules
     paired_end = channel.from(paired_end_check).first()
 
     // Create input channel from samplesheet
-    ch_input = channel.fromList(samplesheetToList(params.input, "assets/schema_input.json"))
+    ch_input = channel.fromList(samples)
 
-    // Create channel with sample id and RNA reads (single or paired)
-    reads = ch_input
-        .filter { meta, _filename_1, _filename_2 ->
-            meta.filetype == "fastq" && meta.sequence == "rna"
-        }
-        .map { meta, fastq_1, fastq_2 ->
-            def read_files = fastq_2 ? [fastq_1, fastq_2] : [fastq_1]
-            tuple(meta.id, read_files)
-        }
+    // Trimmed reads from a previous QC run replace the input reads when QC is skipped
+    trimmed_glob = "${params.outdir}/**/*{R1,R2}*_trimmed.{fastq.gz,fq.gz}"
+    use_input_reads = run_qc || file(trimmed_glob).isEmpty()
+
+    // Create channel with sample id and RNA reads (single or paired), CRAM input is converted to fastq
+    if (use_input_reads) {
+        PREPARE_READS(ch_input, params.cram_references)
+        reads = PREPARE_READS.out.reads
+    } else {
+        reads = channel.empty()
+    }
 
     // Build patient_id maps for wgs matching
     rna_map = ch_input
@@ -92,9 +98,7 @@ workflow RNASEQ {
         multiqc_files = multiqc_files.mix(QC.out.strand_file)
 
     } else {
-        // Look for trimmed reads from previous QC run
-        trimmed_glob = "${params.outdir}/**/*{R1,R2}*_trimmed.{fastq.gz,fq.gz}"
-        
+        // Look for trimmed reads from previous QC run (trimmed_glob defined above)
         // Checl if file(trimmed_glob) expected to be list of files is not empty
         if (!file(trimmed_glob).isEmpty()) {
             if (!params.bam_files) {

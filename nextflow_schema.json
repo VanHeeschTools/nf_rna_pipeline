@@ -157,6 +157,11 @@
                     "description": "Whether to publish trimmed reads to the output folder, needed for qc_restart runs",
                     "default": true
                 },
+                "save_converted_fastq": {
+                    "type": "boolean",
+                    "description": "Whether to publish the fastq files converted from CRAM input to `{outdir}/cram_to_fastq`",
+                    "default": false
+                },
                 "custom_annotation": {
                     "type": "string",
                     "description": "Formats for custom annotation outputs",
@@ -211,6 +216,12 @@
                 "sample_gtf_list": {
                     "type": "string",
                     "description": "Path to file containing a list of individual sample GTFs for merging"
+                },
+                "cram_references": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "description": "Text file listing candidate reference fastas for CRAM input, one path per line. Each fasta needs a .fai index. The fasta matching the sequence names and M5 checksums of each CRAM header is used, unless the samplesheet `reference` column is filled."
                 },
                 "strand_info": {
                     "type": "string",

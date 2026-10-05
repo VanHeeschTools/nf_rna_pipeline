@@ -96,6 +96,23 @@
                         "maxLength": 0
                     }
                 ]
+            },
+            "reference": {
+                "errorMessage": "reference cannot contain spaces and must be an existing fasta file (with .fai index) used to create the CRAM file.",
+                "type": "string",
+                "format": "file-path",
+                "exists": true,
+                "anyOf": [
+                    {
+                        "pattern": "^\\S+$"
+                    },
+                    {
+                        "maxLength": 0
+                    }
+                ],
+                "meta": [
+                    "reference"
+                ]
             }
         },
         "required": [
