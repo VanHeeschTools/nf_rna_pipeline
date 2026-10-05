@@ -1,0 +1,2 @@
+sample_id,subject_id,sample_type,sequence_type,file_type,filename_1,filename_2,reference
+cram_a,patient2,tumor,rna,cram,test/cram/data/sample_a.cram,,test/cram/data/ref_b.fa
