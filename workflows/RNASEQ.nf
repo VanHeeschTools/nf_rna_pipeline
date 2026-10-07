@@ -32,7 +32,8 @@ workflow RNASEQ {
     checkInputFiles(samples)
 
     // Check if input is paired_end or single end and prevent mixing
-    boolean paired_end_check = is_paired_end(samples)
+    // Plain assignment: Nextflow 23.x/24.x reject a typed declaration that uses an earlier workflow variable
+    paired_end_check = is_paired_end(samples)
     // Turn into channel to give to modules
     paired_end = channel.from(paired_end_check).first()
 
