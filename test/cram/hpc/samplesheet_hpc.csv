@@ -1,0 +1,4 @@
+sample_id,subject_id,sample_type,sequence_type,file_type,filename_1,filename_2,reference
+S1_cram,patient1,tumor,rna,cram,/hpc/pmc_vanheesch/projects/<your_folder>/cram_test/data/S1.cram,,
+S2_cram,patient2,tumor,rna,cram,/hpc/pmc_vanheesch/projects/<your_folder>/cram_test/data/S2.cram,,/hpc/pmc_vanheesch/shared_resources/<path_to_reference>/ref_genome.fa
+S1_fastq,patient1,tumor,rna,fastq,/hpc/pmc_vanheesch/projects/<your_folder>/cram_test/cram2fastq_output/fastq/S1_1.fastq.gz,/hpc/pmc_vanheesch/projects/<your_folder>/cram_test/cram2fastq_output/fastq/S1_2.fastq.gz,

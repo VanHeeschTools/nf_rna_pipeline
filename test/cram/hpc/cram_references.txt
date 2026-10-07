@@ -1,0 +1,6 @@
+# Candidate reference fastas for CRAM input, one path per line.
+# Each fasta needs a .fai index next to it (samtools faidx <fasta>).
+# Lines starting with # are ignored.
+/hpc/pmc_vanheesch/shared_resources/<path_to_v31_CTAT_reference>/ref_genome.fa
+/hpc/pmc_vanheesch/shared_resources/<path_to_v29_CTAT_reference>/ref_genome.fa
+/hpc/pmc_vanheesch/shared_resources/<path_to_v27_reference>/ref_genome.fa
