@@ -1,4 +1,4 @@
-sample_id,subject_id,sample_type,sequence_type,file_type,filename_1,filename_2,reference
+sample_id,subject_id,sample_type,sequence_type,file_type,filename_1,filename_2,conversion_reference
 fastq_s1,patient1,tumor,rna,fastq,test/cram/data/fastq_s1_R1.fastq.gz,test/cram/data/fastq_s1_R2.fastq.gz,
 cram_a,patient2,tumor,rna,cram,test/cram/data/sample_a.cram,,
 cram_b,patient3,tumor,rna,cram,test/cram/data/sample_b.cram,,

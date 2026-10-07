@@ -1,20 +1,20 @@
 include { cramHeaderSq; referenceSq; cramToFastq } from '../modules/cramToFastq'
-include { select_cram_reference } from '../modules/helperFunctions.nf'
+include { select_conversion_reference } from '../modules/helperFunctions.nf'
 
 /*
 * Converts RNA-seq CRAM files to paired fastq files.
-* The reference fasta of each CRAM comes from the samplesheet `reference` column, or is
-* selected from `cram_references` by matching sequence names and M5 checksums of the CRAM header.
+* The reference fasta of each CRAM comes from the samplesheet `conversion_reference` column, or is
+* selected from `conversion_references` by matching sequence names and M5 checksums of the CRAM header.
 */
 workflow CRAM_TO_FASTQ {
     take:
-    crams            // Tuple of sample meta map and cram file
-    cram_references  // Path to text file listing candidate reference fastas (one per line), or null
+    crams                 // Tuple of sample meta map and cram file
+    conversion_references // Path to text file listing candidate reference fastas (one per line), or null
 
     main:
-    // Collect candidate reference fastas from cram_references and the samplesheet
-    if (cram_references) {
-        listed_references = channel.fromPath(cram_references, checkIfExists: true)
+    // Collect candidate reference fastas from conversion_references and the samplesheet
+    if (conversion_references) {
+        listed_references = channel.fromPath(conversion_references, checkIfExists: true)
             .splitText()
             .map { line -> line.trim() }
             .filter { line -> line && !line.startsWith('#') }
@@ -23,8 +23,8 @@ workflow CRAM_TO_FASTQ {
     }
 
     samplesheet_references = crams
-        .filter { meta, _cram -> meta.reference }
-        .map { meta, _cram -> meta.reference.toString() }
+        .filter { meta, _cram -> meta.conversion_reference }
+        .map { meta, _cram -> meta.conversion_reference.toString() }
 
     // Use full paths so the same fasta given in both places is only checked once
     reference_fastas = listed_references
@@ -49,8 +49,8 @@ workflow CRAM_TO_FASTQ {
         .join(cramHeaderSq.out.sq.map { meta, sq_table -> tuple(meta.id, sq_table.readLines()) })
         .combine(reference_sq)
         .map { _sample_id, meta, cram, cram_sq, references ->
-            def fasta = select_cram_reference(meta, cram_sq, references)
-            log.info "cram input    : ${meta.id} uses reference ${fasta}"
+            def fasta = select_conversion_reference(meta, cram_sq, references)
+            log.info "cram input    : ${meta.id} uses conversion reference ${fasta}"
             tuple(meta, cram, file(fasta), file("${fasta}.fai"))
         }
 

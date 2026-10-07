@@ -31,18 +31,18 @@ def duplicate_sample_ids(List samples) {
 
 /*
  * Lists the reference fastas given for CRAM input: the samplesheet `reference`
- * column and the fastas listed in `params.cram_references`.
+ * column and the fastas listed in `params.conversion_references`.
  *
  * @param samples list of [meta, filename_1, filename_2] rows from samplesheetToList
  * @return unique list of reference fasta paths as Strings
  */
-def cram_reference_fastas(List samples) {
+def conversion_reference_fastas(List samples) {
     def fastas = samples
-        .findAll { row -> row[0].filetype == "cram" && row[0].reference }
-        .collect { row -> row[0].reference.toString() }
+        .findAll { row -> row[0].filetype == "cram" && row[0].conversion_reference }
+        .collect { row -> row[0].conversion_reference.toString() }
 
-    if (params.cram_references) {
-        fastas += file(params.cram_references).readLines()
+    if (params.conversion_references) {
+        fastas += file(params.conversion_references).readLines()
             .collect { line -> line.trim() }
             .findAll { line -> line && !line.startsWith('#') }
     }
@@ -70,10 +70,10 @@ def sq_keys(List lines) {
  * @param references list of [fasta, lines] with the same table for each candidate fasta
  * @return path of the matching reference fasta as String
  */
-def select_cram_reference(meta, List cram_sq, List references) {
+def select_conversion_reference(meta, List cram_sq, List references) {
     def cram_fields = cram_sq.collect { line -> line.split('\t', -1) }
     def cram_uris = cram_fields.collect { fields -> fields.size() > 2 ? fields[2] : "" }.findAll { uri -> uri }.unique()
-    def given_reference = meta.reference ? file(meta.reference.toString()).toUriString() : null
+    def given_reference = meta.conversion_reference ? file(meta.conversion_reference.toString()).toUriString() : null
 
     // Without M5 checksums the reference can't be verified
     if (!cram_fields || cram_fields.any { fields -> fields.size() < 2 || !fields[1] }) {
@@ -83,7 +83,7 @@ def select_cram_reference(meta, List cram_sq, List references) {
         }
         error """
             CRAM header of ${meta.id} has no M5 checksums, so its reference can't be matched automatically.
-            Fill the `reference` column in the samplesheet for this sample.
+            Fill the `conversion_reference` column in the samplesheet for this sample.
             Reference used to create the CRAM: ${cram_uris ? cram_uris.join(', ') : 'unknown'}
             """.stripIndent()
     }
@@ -95,7 +95,7 @@ def select_cram_reference(meta, List cram_sq, List references) {
     if (!match) {
         def reason = given_reference
             ? "The reference given in the samplesheet (${given_reference}) does not match the CRAM header."
-            : "None of the fastas in `cram_references` matches the CRAM header."
+            : "None of the fastas in `conversion_references` matches the CRAM header."
         error """
             No matching reference fasta found for CRAM sample ${meta.id}.
             ${reason}
@@ -230,24 +230,29 @@ def checkInputFiles(List samples) {
         }
     }
 
-    // Check reference fastas for CRAM input
+    // Check conversion reference fastas for CRAM input (only used to convert CRAM to fastq)
     def rna_crams = samples.findAll { row -> row[0].sequence == "rna" && row[0].filetype == "cram" }
     if (rna_crams) {
-        def without_reference = rna_crams.findAll { row -> !row[0].reference }.collect { row -> row[0].id }
-        if (without_reference && !params.cram_references) {
+        def without_reference = rna_crams.findAll { row -> !row[0].conversion_reference }.collect { row -> row[0].id }
+        if (without_reference && !params.conversion_references) {
             error """
-                No reference fasta available for CRAM samples: ${without_reference.join(', ')}
-                Fill the `reference` column in the samplesheet, or set `cram_references` to a text file listing candidate reference fastas (one path per line).
+                No conversion reference fasta available for CRAM samples: ${without_reference.join(', ')}
+                Fill the `conversion_reference` column in the samplesheet, or set `conversion_references` to a text file listing candidate reference fastas (one path per line).
                 """.stripIndent()
         }
-        if (params.cram_references) {
-            check_files("cram_references", params.cram_references, "file")
+        if (params.conversion_references) {
+            check_files("conversion_references", params.conversion_references, "file")
         }
-        cram_reference_fastas(samples).each { fasta ->
-            check_files("cram reference fasta", fasta, "file")
+        conversion_reference_fastas(samples).each { fasta ->
+            check_files("conversion reference fasta", fasta, "file")
             if (!file("${fasta}.fai").exists()) {
-                error "--cram reference fasta: index ${fasta}.fai doesn't exist, create it with `samtools faidx ${fasta}`"
+                error "--conversion reference fasta: index ${fasta}.fai doesn't exist, create it with `samtools faidx ${fasta}`"
             }
+        }
+        // The CRAM index (.crai) is not needed, filename_2 is ignored for CRAM rows
+        def with_filename_2 = rna_crams.findAll { row -> row[2] }.collect { row -> row[0].id }
+        if (with_filename_2) {
+            log.warn "filename_2 is ignored for CRAM input (no .crai index needed), samples: ${with_filename_2.join(', ')}"
         }
         log.info "cram input    : ${rna_crams.size()} sample(s), converted to fastq before QC"
     }

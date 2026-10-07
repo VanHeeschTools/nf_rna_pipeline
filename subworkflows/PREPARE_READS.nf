@@ -6,8 +6,8 @@ include { CRAM_TO_FASTQ } from './CRAM_TO_FASTQ'
 */
 workflow PREPARE_READS {
     take:
-    ch_input         // Tuple of sample meta map, filename_1 and filename_2 from the samplesheet
-    cram_references  // Path to text file listing candidate reference fastas for CRAM input, or null
+    ch_input              // Tuple of sample meta map, filename_1 and filename_2 from the samplesheet
+    conversion_references // Path to text file listing candidate reference fastas for CRAM input, or null
 
     main:
     rna_input = ch_input
@@ -26,7 +26,7 @@ workflow PREPARE_READS {
         .filter { meta, _filename_1, _filename_2 -> meta.filetype == "cram" }
         .map { meta, cram, _filename_2 -> tuple(meta, cram) }
 
-    CRAM_TO_FASTQ(crams, cram_references)
+    CRAM_TO_FASTQ(crams, conversion_references)
 
     emit:
     reads = fastq_reads.mix(CRAM_TO_FASTQ.out.reads) // Tuple of sample id and input read file(s)

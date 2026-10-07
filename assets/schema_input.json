@@ -97,8 +97,8 @@
                     }
                 ]
             },
-            "reference": {
-                "errorMessage": "reference cannot contain spaces and must be an existing fasta file (with .fai index) used to create the CRAM file.",
+            "conversion_reference": {
+                "errorMessage": "conversion_reference cannot contain spaces and must be an existing fasta file (with .fai index) used to create the CRAM file. It is only used to convert the CRAM to fastq.",
                 "type": "string",
                 "format": "file-path",
                 "exists": true,
@@ -111,7 +111,7 @@
                     }
                 ],
                 "meta": [
-                    "reference"
+                    "conversion_reference"
                 ]
             }
         },

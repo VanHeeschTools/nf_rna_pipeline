@@ -217,11 +217,11 @@
                     "type": "string",
                     "description": "Path to file containing a list of individual sample GTFs for merging"
                 },
-                "cram_references": {
+                "conversion_references": {
                     "type": "string",
                     "format": "file-path",
                     "exists": true,
-                    "description": "Text file listing candidate reference fastas for CRAM input, one path per line. Each fasta needs a .fai index. The fasta matching the sequence names and M5 checksums of each CRAM header is used, unless the samplesheet `reference` column is filled."
+                    "description": "Text file listing candidate reference fastas for CRAM input, one path per line. Each fasta needs a .fai index. The fasta matching the sequence names and M5 checksums of each CRAM header is used, unless the samplesheet `conversion_reference` column is filled."
                 },
                 "strand_info": {
                     "type": "string",

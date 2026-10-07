@@ -45,7 +45,7 @@ workflow RNASEQ {
 
     // Create channel with sample id and RNA reads (single or paired), CRAM input is converted to fastq
     if (use_input_reads) {
-        PREPARE_READS(ch_input, params.cram_references)
+        PREPARE_READS(ch_input, params.conversion_references)
         reads = PREPARE_READS.out.reads
     } else {
         reads = channel.empty()
