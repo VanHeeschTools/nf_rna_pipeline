@@ -14,33 +14,97 @@ def printHeader () {
 }
 
 
-def check_duplicate_samples(String filePath) {
-    // Empty set to store unique sample ids
-    def unique_values = new HashSet()
-    def has_duplicates = false
+/*
+ * Finds sample ids that occur more than once in the samplesheet.
+ *
+ * @param samples list of [meta, filename_1, filename_2] rows from samplesheetToList
+ * @return list of duplicated sample ids, empty if all are unique
+ */
+def duplicate_sample_ids(List samples) {
+    return samples
+        .collect { row -> row[0].id }
+        .countBy { sample_id -> sample_id }
+        .findAll { _sample_id, count -> count > 1 }
+        .keySet()
+        .toList()
+}
 
-    // Read the CSV file 
-    new File(filePath).eachLine { line ->
-        // Skip empty lines
-        if (line.trim()) {
-            def columns = line.split(',')
-            // Obtain values from first columns
-            def first_column_value = columns[0].trim()
+/*
+ * Lists the reference fastas given for CRAM input: the samplesheet `reference`
+ * column and the fastas listed in `params.conversion_references`.
+ *
+ * @param samples list of [meta, filename_1, filename_2] rows from samplesheetToList
+ * @return unique list of reference fasta paths as Strings
+ */
+def conversion_reference_fastas(List samples) {
+    def fastas = samples
+        .findAll { row -> row[0].filetype == "cram" && row[0].conversion_reference }
+        .collect { row -> row[0].conversion_reference.toString() }
 
-            // Check if the value is unique
-            if (unique_values.contains(first_column_value)) {
-                // If duplicate found end loop and return true
-                has_duplicates = true
-                return
-            } else {
-                // Add value to set
-                unique_values.add(first_column_value)
-            }
-        }
+    if (params.conversion_references) {
+        fastas += file(params.conversion_references).readLines()
+            .collect { line -> line.trim() }
+            .findAll { line -> line && !line.startsWith('#') }
     }
 
-    // Return the result: true if duplicates found, false otherwise
-    return has_duplicates
+    return fastas.unique()
+}
+
+/*
+ * Turns "name<TAB>m5<TAB>uri" lines into a set of "name<TAB>m5" keys.
+ */
+def sq_keys(List lines) {
+    return lines.collect { line ->
+        def fields = line.split('\t', -1)
+        "${fields[0]}\t${fields[1]}".toString()
+    } as Set
+}
+
+/*
+ * Selects the reference fasta of a CRAM file by comparing the sequence names and
+ * M5 checksums of the CRAM header with those of the candidate reference fastas.
+ * When the samplesheet gives a reference, only that fasta is checked.
+ *
+ * @param meta       sample meta map
+ * @param cram_sq    lines "name<TAB>m5<TAB>uri" for every @SQ record of the CRAM header
+ * @param references list of [fasta, lines] with the same table for each candidate fasta
+ * @return path of the matching reference fasta as String
+ */
+def select_conversion_reference(meta, List cram_sq, List references) {
+    def cram_fields = cram_sq.collect { line -> line.split('\t', -1) }
+    def cram_uris = cram_fields.collect { fields -> fields.size() > 2 ? fields[2] : "" }.findAll { uri -> uri }.unique()
+    def given_reference = meta.conversion_reference ? file(meta.conversion_reference.toString()).toUriString() : null
+
+    // Without M5 checksums the reference can't be verified
+    if (!cram_fields || cram_fields.any { fields -> fields.size() < 2 || !fields[1] }) {
+        if (given_reference) {
+            log.warn "CRAM header of ${meta.id} has no M5 checksums, using ${given_reference} from the samplesheet without verification"
+            return given_reference
+        }
+        error """
+            CRAM header of ${meta.id} has no M5 checksums, so its reference can't be matched automatically.
+            Fill the `conversion_reference` column in the samplesheet for this sample.
+            Reference used to create the CRAM: ${cram_uris ? cram_uris.join(', ') : 'unknown'}
+            """.stripIndent()
+    }
+
+    def cram_keys = sq_keys(cram_sq)
+    def candidates = given_reference ? references.findAll { fasta, _lines -> fasta == given_reference } : references
+    def match = candidates.find { _fasta, lines -> sq_keys(lines).containsAll(cram_keys) }
+
+    if (!match) {
+        def reason = given_reference
+            ? "The reference given in the samplesheet (${given_reference}) does not match the CRAM header."
+            : "None of the fastas in `conversion_references` matches the CRAM header."
+        error """
+            No matching reference fasta found for CRAM sample ${meta.id}.
+            ${reason}
+            Sequence names and M5 checksums of the reference must match all @SQ lines of the CRAM header.
+            Reference used to create the CRAM: ${cram_uris ? cram_uris.join(', ') : 'unknown'}
+            """.stripIndent()
+    }
+
+    return match[0]
 }
 
 // Checks existence of given file path, can be a file or a directory
@@ -76,7 +140,8 @@ def check_files(name, path, type) {
 }
 
 // Checks existence of files listed in this function
-def checkInputFiles() {
+// samples: list of [meta, filename_1, filename_2] rows from samplesheetToList
+def checkInputFiles(List samples) {
     // Check inputs
     def default_strand =  "${params.outdir}/check_strandedness/strandedness_all.txt"
     if (!params.qc && ( params.align || params.assembly )) {
@@ -165,73 +230,64 @@ def checkInputFiles() {
         }
     }
 
+    // Check conversion reference fastas for CRAM input (only used to convert CRAM to fastq)
+    def rna_crams = samples.findAll { row -> row[0].sequence == "rna" && row[0].filetype == "cram" }
+    if (rna_crams) {
+        def without_reference = rna_crams.findAll { row -> !row[0].conversion_reference }.collect { row -> row[0].id }
+        if (without_reference && !params.conversion_references) {
+            error """
+                No conversion reference fasta available for CRAM samples: ${without_reference.join(', ')}
+                Fill the `conversion_reference` column in the samplesheet, or set `conversion_references` to a text file listing candidate reference fastas (one path per line).
+                """.stripIndent()
+        }
+        if (params.conversion_references) {
+            check_files("conversion_references", params.conversion_references, "file")
+        }
+        conversion_reference_fastas(samples).each { fasta ->
+            check_files("conversion reference fasta", fasta, "file")
+            if (!file("${fasta}.fai").exists()) {
+                error "--conversion reference fasta: index ${fasta}.fai doesn't exist, create it with `samtools faidx ${fasta}`"
+            }
+        }
+        // The CRAM index (.crai) is not needed, filename_2 is ignored for CRAM rows
+        def with_filename_2 = rna_crams.findAll { row -> row[2] }.collect { row -> row[0].id }
+        if (with_filename_2) {
+            log.warn "filename_2 is ignored for CRAM input (no .crai index needed), samples: ${with_filename_2.join(', ')}"
+        }
+        log.info "cram input    : ${rna_crams.size()} sample(s), converted to fastq before QC"
+    }
+
     // Check for duplicate sample ids
-    if (check_duplicate_samples(params.input)) {
-        error "\nERROR: Duplicate sample_ids found in the input samplesheet\n"
-    } 
+    def duplicates = duplicate_sample_ids(samples)
+    if (duplicates) {
+        error "\nERROR: Duplicate sample_ids found in the input samplesheet: ${duplicates.join(', ')}\n"
+    }
 
     log.info "\n==========================\n"
 }
 
 /*
- * Checks whether all samples in a samplesheet are paired-end or single-end.
+ * Checks whether all RNA samples in a samplesheet are paired-end or single-end.
+ * CRAM samples are converted to paired-end fastq files, so they count as paired-end.
  * Throws an error if there's a mix.
  *
- * @param samplesheet_path path to CSV samplesheet
+ * @param samples list of [meta, filename_1, filename_2] rows from samplesheetToList
  * @return true if all samples are paired-end, false if all are single-end
  */
-def is_paired_end(String filePath) {
-    def uniqueFlags = new HashSet()
-    def headerParsed = false
-    int idx_filename_1 = -1
-    int idx_filename_2 = -1
-    int idx_sequence = -1
+def is_paired_end(List samples) {
+    def paired_flags = samples
+        .findAll { row -> row[0].sequence == "rna" && row[0].filetype in ["fastq", "cram"] }
+        .collect { row -> row[0].filetype == "cram" ? true : (row[2] ? true : false) }
+        .unique()
 
-    new File(filePath).eachLine { line ->
-        if (!line.trim()) return  // skip empty lines
-
-        def cols = line.split(",")*.trim()
-
-        if (!headerParsed) {
-            idx_filename_1 = cols.indexOf("filename_1")
-            idx_filename_2 = cols.indexOf("filename_2")
-            idx_sequence = cols.indexOf("sequence_type")
-
-            if (idx_filename_1 == -1 || idx_filename_2 == -1) {
-                throw new IllegalArgumentException("Samplesheet missing required columns 'filename_1' or 'filename_2'")
-            }
-            if (idx_sequence == -1) {
-                throw new IllegalArgumentException("Samplesheet missing required column 'sequence'")
-            }
-            headerParsed = true
-        } else {
-            def sequence = (idx_sequence < cols.size()) ? cols[idx_sequence] : null
-
-            if (sequence?.toLowerCase() == "dna") return  // ignore DNA entries
-
-            def f1 = (idx_filename_1 < cols.size()) ? cols[idx_filename_1] : null
-            def f2 = (idx_filename_2 < cols.size()) ? cols[idx_filename_2] : null
-
-            if (!f1) {
-                throw new IllegalArgumentException("Missing filename_1 in row: ${line}")
-            }
-
-            uniqueFlags.add(f2 ? true : false)
-
-            if (uniqueFlags.size() > 1) {
-                throw new IllegalArgumentException("Mixed paired-end and single-end data detected in samplesheet! Please only use one type of data")
-            }
-        }
+    if (paired_flags.isEmpty()) {
+        error "Samplesheet contains no RNA fastq or cram rows."
+    }
+    if (paired_flags.size() > 1) {
+        error "Mixed paired-end and single-end data detected in samplesheet! Please only use one type of data. Note: CRAM input counts as paired-end."
     }
 
-    if (!headerParsed) {
-        throw new IllegalArgumentException("Samplesheet is empty or missing header.")
-    }
-    if (uniqueFlags.isEmpty()) {
-        throw new IllegalArgumentException("Samplesheet contains no data rows.")
-    }
-
-    return uniqueFlags.iterator().next()
+    return paired_flags[0]
 }
 
 // Groovy function to check if strand type exists and to set the strand type if found

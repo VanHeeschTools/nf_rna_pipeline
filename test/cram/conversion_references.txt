@@ -1,0 +1,3 @@
+# Candidate reference fastas for CRAM input, one per line
+test/cram/data/ref_a.fa
+test/cram/data/ref_b.fa

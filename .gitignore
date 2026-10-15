@@ -30,3 +30,6 @@ work/*
 
 #Ignore dev files
 schema_cache_id.txt
+
+# Output of the CRAM stub test
+test/cram/output/

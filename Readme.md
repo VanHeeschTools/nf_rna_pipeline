@@ -117,8 +117,9 @@ How to use:
 | `file_type`      | Format of the input files, e.g., `fastq`.   | Yes          | Must be one of the supported formats: `fastq`, `bam`, `cram`, `vcf`, `csv`, etc. *|
 | `filename_1`     | Path to the first file (e.g., R1 FASTQ file for paired-end or single-end data).  | Yes          | Must be a valid file path with no spaces. File extension must match `file_type`. |
 | `filename_2`     | (Optional) Path to the second file (e.g., R2 FASTQ file for paired-end data).    | No           | Must be a valid file path with no spaces. If not applicable, leave empty.       |
+| `conversion_reference` | (Optional) Reference fasta used to create a CRAM file (`file_type` `cram`). Only used to convert the CRAM to fastq. | No | Must be an existing fasta with a `.fai` index. If empty, the reference is matched from `conversion_references`. |
 
-(*) Note: Not all suported formats can be used within the pipeline. I.e. bams/crams are still not implemented as input.
+(*) Note: Not all suported formats can be used within the pipeline. RNA input can be `fastq` or `cram` (see [CRAM input](#cram-input)); bams are still not implemented as input.
 
 **Example samplesheet**:
 ```
@@ -131,7 +132,32 @@ subject3,sampleC,cohort2,tumor,dna,vcf,/path/to/sampleC.vcf,
 Notes:
 - All file paths (filename_1 and filename_2) must not contain spaces and should have extensions that match the declared file_type.
 - Subject and sample ids must contain charaters (only numeric values will not be read properly).
-- For single-end data or non-FASTQ files (e.g., BAM, VCF), filename_2 can be omitted or left empty.
+- For single-end data or non-FASTQ files (e.g., BAM, CRAM, VCF), filename_2 can be omitted or left empty. For CRAM rows filename_2 is ignored: no `.crai` index is needed, because the whole file is converted.
+
+### CRAM input
+
+RNA-seq CRAM files (e.g. from a biobank) can be given directly in the samplesheet with `file_type` set to `cram`. Before QC, each CRAM is converted to paired fastq files with `samtools collate | samtools fastq`, after which the pipeline runs as it does for fastq input. CRAM and fastq rows can be mixed in one samplesheet.
+
+Decoding a CRAM needs the reference fasta it was created with (the conversion reference). This reference is **only** used to convert the CRAM to fastq. All analysis steps after the conversion (alignment, assembly, expression, fusions) use the pipeline references (`reference_gtf`, `star_index_basedir`, `masked_fasta`, ...), so CRAM samples from other groups are analysed with the same references as fastq samples. The conversion reference is selected as follows:
+
+1. If the `conversion_reference` column is filled for the sample, that fasta is used.
+2. Otherwise the fastas listed in `conversion_references` are tried. The fasta whose sequence names and M5 checksums match all `@SQ` lines of the CRAM header is used, so it doesn't matter where the CRAM was originally created or whether that path is accessible.
+3. If no fasta matches, the pipeline stops and reports the reference path stored in the CRAM header.
+
+A reference given in the `conversion_reference` column is checked against the CRAM header in the same way. Every fasta needs a `.fai` index (`samtools faidx`). The selected reference of each sample is printed in the log (`cram input : <sample> uses conversion reference <fasta>`).
+
+Example `conversion_references` file:
+```
+/path/to/references/GRCh38_v31_CTAT/ref_genome.fa
+/path/to/references/GRCh38_v29_CTAT/ref_genome.fa
+```
+
+Notes:
+- Only paired-end CRAM files are supported. CRAM rows count as paired-end in the paired/single-end check, so they can't be mixed with single-end fastq rows.
+- Reads without a mate (singletons) are not used.
+- Converted fastq files are only kept in the work directory unless `save_converted_fastq = true`, in which case they are published to `{outdir}/cram_to_fastq/`.
+- Conversion runs in the `cramHeaderSq`, `referenceSq` and `cramToFastq` processes, which use the `samtools` label for the container.
+- A stub test of the CRAM input handling (no containers needed) can be run from the repository root: `nextflow run . -stub -c test/cram/stub_test.config`.
 
 ### Parameter specification
 | **Parameter**               | **Description**                                                                                     | **Type**   | **Required** | **Used by Module**                | **Default**                          |
@@ -172,6 +198,8 @@ Notes:
 | `container_folder`          | Path to the container location.                                                                     | string     | No           | All modules                        |                                      |
 | `sample_gtf_list`           | Path to a file containing a list of individual sample GTFs for merging.                             | string     | No           | `merge`                            |                                      |
 | `strand_info`               | Strandedness information, if available.                                                             | string     | No           | `assembly`                         |                                      |
+| `conversion_references`     | Text file listing candidate reference fastas used to convert CRAM input to fastq, one path per line (see [CRAM input](#cram-input)). Not used for the analysis itself. | string | No | CRAM input |  |
+| `save_converted_fastq`      | Publish fastq files converted from CRAM input to `{outdir}/cram_to_fastq/`.                        | boolean    | No           | CRAM input                         | `false`                              |
 | **Maximum specifications**   |                                                                                                     |            |              |                                    |                                      |
 | `max_memory`                | Maximum memory allocation per process.                                                              | string     | No           | All modules                        |                                      |
 | `max_cpus`                  | Maximum CPU allocation per process.                                                                 | integer    | No           | All modules                        |                                      |
