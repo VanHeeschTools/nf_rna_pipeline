@@ -47,32 +47,30 @@ process filterAnnotate {
         path gtf_tracking   // Path to the tracking file created by the merge step
         val min_occurrence  // Val contatining the minimum occurence of transcripts for filtering
         val min_tpm         // Val containing the minium tpm of transcripts for filtering
-        val output_basename // Val containing output basename
-        path scripts_dir    // Path location of input R scripts
-        path "filter_annotate.R"
-        path "filter_annotate_functions.R"
+        val output_prefix   // Val containing output basename
 
     output:
-        path "${output_basename}.extended_reference.gtf", emit: gtf
-        path "${output_basename}.novel_transcripts.gtf", emit: gtf_novel
-        path "${output_basename}.log"
-        path "${output_basename}.tsv"
+        path "${output_prefix}.extended_reference.gtf", emit: gtf
+        path "${output_prefix}.novel_transcripts.gtf", emit: gtf_novel
+        path "${output_prefix}.log"
+        path "${output_prefix}.tsv"
 
     when:
         task.ext.when == null || task.ext.when
 
     script:
-	def refseq_prefix = refseq_files ? refseq_files[0].name.replace(".xr.gff", "").replace(".nr.gff", "") : ""
+        def refseq_prefix = refseq_files ? refseq_files[0].name.replace(".xr.gff", "").replace(".nr.gff", "") : ""
         def refseq_arg = refseq_prefix ? "\"${refseq_prefix}\"" : ""
         """
-        filter_annotate.R \
+        filter_annotate.py \
         "${reference_gtf}" \
         "${gtf_novel}" \
         "${gtf_tracking}" \
         "${min_occurrence}" \
         "${min_tpm}" \
-        "${output_basename}" \
-        "${scripts_dir}" \
+        "${output_prefix}" \
+        SR \
+        ${task.cpus} \
         ${refseq_arg}
         """
 }
@@ -114,7 +112,7 @@ process select_lr_novel_records {
 
     gtf <- import("${longread_gtf}")
     keep_ids <- unique(gtf\$transcript_id[!is.na(gtf\$transcript_evidence) &
-                                        gtf\$transcript_evidence == "LR_novel"])
+                                        gtf\$transcript_evidence == "LR-novel"])
     export(gtf[gtf\$transcript_id %in% keep_ids], "lr_novel.transcript_records.gtf")
     """
 }
@@ -135,6 +133,7 @@ process trmap{
 
     script:
         """
+        # Not required anymore
         trmap -o "trmap_sr_vs_lr.out" \
                 "${merged_filtered_novel_gtf}" \
                 "${lr_novel_gtf}"
@@ -145,34 +144,31 @@ process trmap{
         """
 }
 
-process lr_sr_combine_transcriptome{
-    debug true  
-    label "salmon_tables"
+// Merge the LR and SR transcriptomes into one annotation
+process lr_sr_combine_transcriptome {
+    label 'lr_sr_combine_transcriptome'
 
     input:
-        path sr_gtf_file
-        path lr_gtf_file
-        path trmap_out_file
-        path trmap_tab_file
+        path sr_gtf, stageAs: 'sr/*'   // SR extended_reference.gtf
+        path lr_gtf, stageAs: 'lr/*'   // LR extended_reference.gtf
+        path trmap_tab
         val min_occurrence
-        path "filter_annotate_functions.R"
-    
+        val end_tolerance
+
     output:
-        path "unified_lr_sr_novel.gtf"
-        path "unified_lr_sr.gtf"
-    
-    when:
-        task.ext.when == null || task.ext.when
+        path "unified_lr_sr.gtf", emit: gtf
+        path "unified_lr_sr_novel.gtf", emit: novel_gtf
+        path "unified_transcriptome.log", emit: log
 
     script:
         """
-        lr_sr_combine_transcriptomes_trmap.R \
-            "${sr_gtf_file}" \
-            "${lr_gtf_file}" \
-            "${trmap_out_file}" \
-            "${trmap_tab_file}" \
-            "." \
-            "${min_occurrence}" \
+        lr_sr_combine.py \
+        "${sr_gtf}" \
+        "${lr_gtf}" \
+        "${trmap_tab}" \
+        . \
+        "${min_occurrence}" \
+        "${end_tolerance}" \
+        ${task.cpus}
         """
-
 }

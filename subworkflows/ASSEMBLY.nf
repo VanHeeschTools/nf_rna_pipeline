@@ -12,7 +12,8 @@ workflow ASSEMBLY {
     output_basename    // Val containing the id/name given to the output files
     min_occurrence     // Val contatining the minimum occurence of transcripts for filtering
     min_tpm            // Val containing the minium tpm of transcripts for filtering
-    longread_gtf
+    longread_gtf       // Path to custom gtf output from the nf_longread pipeline
+    end_tolerance      // Val max nt difference at which LR and SR transcript ends still count as the same
 
     main:
     // Run stringtie unless paths to precomputed individual sample GTF are provided
@@ -60,8 +61,7 @@ workflow ASSEMBLY {
 
         refseq_input = refseq_gtf ? file("${refseq_gtf}*.gff") : []
 
-        // Run filter annotate r script
-        // TODO: Sort exons in gtf and add transcript biotype for stringtie tx
+        // Run filter annotate Python script
         if (longread_gtf) {
             filter_annotate_min_occurence = 1
         } else{
@@ -74,10 +74,7 @@ workflow ASSEMBLY {
                         gtf_tracking,
                         filter_annotate_min_occurence,
                         min_tpm,
-                        output_basename,
-                        "${projectDir}/bin/",
-                        file("${projectDir}/bin/filter_annotate.R"),
-                        file("${projectDir}/bin/filter_annotate_functions.R"))
+                        output_basename)
 
         merged_filtered_gtf = filterAnnotate.out.gtf
 
@@ -90,14 +87,17 @@ workflow ASSEMBLY {
             lr_sr_combine_transcriptome(
                 filterAnnotate.out.gtf,
                 params.longread_gtf,
-                trmap.out.trmap_out_file,
                 trmap.out.trmap_tab_file,
                 min_occurrence,
-                file("${projectDir}/bin/filter_annotate_functions.R")
+                end_tolerance
             )
+            transcriptome_fasta(lr_sr_combine_transcriptome.out.gtf, masked_fasta)
+            output_gtf = lr_sr_combine_transcriptome.out.gtf
+        } else{
+            transcriptome_fasta(merged_filtered_gtf, masked_fasta)
+            output_gtf = merged_filtered_gtf
         }
 
-        transcriptome_fasta(merged_filtered_gtf, masked_fasta)
         assembled_transcriptome_fasta = transcriptome_fasta.out
     } else {
         merged_filtered_gtf = null
@@ -106,6 +106,6 @@ workflow ASSEMBLY {
     
     emit:
     stringtie_multiqc
-    merged_filtered_gtf
+    output_gtf
     assembled_transcriptome_fasta
 }

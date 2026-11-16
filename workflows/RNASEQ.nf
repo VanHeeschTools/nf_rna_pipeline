@@ -183,9 +183,10 @@ workflow RNASEQ {
                 params.output_basename,
                 params.min_occurrence,
                 params.min_tpm,
-                params.longread_gtf)
+                params.longread_gtf,
+                params.end_tolerance)
 
-        assembled_gtf = ASSEMBLY.out.merged_filtered_gtf
+        assembled_gtf = ASSEMBLY.out.output_gtf
         assembled_fasta = ASSEMBLY.out.assembled_transcriptome_fasta
         multiqc_files = multiqc_files.mix(ASSEMBLY.out.stringtie_multiqc)
     } else {
