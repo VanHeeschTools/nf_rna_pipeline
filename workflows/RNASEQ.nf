@@ -6,6 +6,7 @@ include { ALIGN } from '../subworkflows/ALIGN'
 include { ASSEMBLY } from '../subworkflows/ASSEMBLY'
 include { FUSIONS } from '../subworkflows/FUSIONS'
 include { EXPRESSION } from '../subworkflows/EXPRESSION'
+include { IMMUNE } from '../subworkflows/IMMUNE'
 include { MULTIQC } from '../modules/multiqc.nf'
 
 workflow RNASEQ {
@@ -18,6 +19,7 @@ workflow RNASEQ {
     run_merge      = params.run_mode == "qc" ? false : params.merge
     run_fusions    = params.run_mode == "qc" ? false : params.fusions
     run_expression = params.run_mode == "qc" ? false : params.expression
+    run_hla_typing = params.run_mode == "qc" ? false : params.hla_typing
 
     // Validate input parameters
     validateParameters()
@@ -239,7 +241,13 @@ workflow RNASEQ {
     /*
     * Step 06: Immune landscape
     */
-    
+    // HLA typing and HLA expression from the STAR alignments
+    if (run_hla_typing) {
+        IMMUNE(bam,
+            paired_end_check,
+            params.output_basename)
+    }
+
     /*
     * Step 07: MultiQC
     */

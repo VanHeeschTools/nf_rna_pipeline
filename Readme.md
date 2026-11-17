@@ -20,6 +20,7 @@ This pipeline is designed for the analysis of RNA-seq data, covering various mod
 3. **Transcriptome Assembly**: Assembles transcripts of individual samples with stringtie, merges all samples and checks against a reference with GFFcompare, and finally filters the merged transcriptome.
 4. **Fusions**: Detects gene fusions using Arriba, optionally takes vcf files from WGS to refine confidence thresholds.
 5. **Expression Analysis**: Quantifies gene expression using Salmon.
+6. **HLA typing (optional)**: Predicts the HLA genotype of each sample with arcasHLA from the STAR alignments, and quantifies HLA allele expression.
 
 ## Usage
 
@@ -29,7 +30,7 @@ This pipeline is designed for the analysis of RNA-seq data, covering various mod
 
     - **Inputs**: Parameters are specified in `params.config`. See an example [here](https://github.com/mars13/nf_rna_pipeline/blob/dev/test/documentation/test_params.config). Alternatively, they can be provided as command-line arguments if double-dashed (`--samplesheet`). A detailed description of the required inputs can be found in the [Inputs](#inputs) section.
 
-    - **Modules**: Adjust settings in `params.config` to toggle pipeline modules on and off (`qc`, `align`, `assembly`, `merge`, `fusion`, `expression`). All steps are set to `true` by default.
+    - **Modules**: Adjust settings in `params.config` to toggle pipeline modules on and off (`qc`, `align`, `assembly`, `merge`, `fusion`, `expression`). All steps are set to `true` by default. The optional HLA typing step (`hla_typing`) is set to `false` by default, see [HLA typing](#hla-typing).
     
     ```
         params {
@@ -187,6 +188,7 @@ Notes:
 | `fusions`                   | Toggle for the fusion detection module.                                                             | boolean    | No           | `fusions`                          | `true`                               |
 | `merge`                     | Toggle for merging individual GTF files into a single file.                                         | boolean    | No           | `merge`                             | `true`                               |
 | `build_annotation`          | Toggle for building a custom annotation from merged GTFs.                                           | boolean    | No           | `build_annotation`                 | `true`                               |
+| `hla_typing`                | Toggle for HLA typing and HLA allele expression with arcasHLA (see [HLA typing](#hla-typing)).      | boolean    | No           | `hla_typing`                       | `false`                              |
 | **Extended pipeline options**|                                                                                                     |            |              |                                    |                                      |
 | `custom_annotation`         | Formats for custom annotation outputs (e.g., "orfquant").                                           | string     | No           | `build_annotation`                 | `"orfquant"`                         |
 | `expression_mode`           | Expression quantification mode for tools like Salmon quant (sq) and FeatureCounts (fc). Can be combined (e.g., "sqfc").              | string     | No           | `expression`                       | `"sqfc"`                             |
@@ -227,6 +229,7 @@ The pipeline generates output files including quality reports, trimmed reads, al
 
 ```
 {outdir}
+├── arcas-hla/          (only with hla_typing)
 ├── check_strandedness/
 ├── customannotation/
 ├── fastp/
@@ -237,6 +240,64 @@ The pipeline generates output files including quality reports, trimmed reads, al
 ```
 
 Additionally it produces Nextflow execution reports in `{project_folder}/log`
+
+### HLA typing
+
+With `hla_typing = true` the HLA genotype and HLA allele expression of every RNA sample are determined with [arcasHLA](https://github.com/RabadanLab/arcasHLA) from the STAR alignments:
+
+1. `arcasHLA extract`: reads from chromosome 6 (`6` or `chr6`, detected from the bam header) and unmapped reads are extracted from the sorted bam.
+2. `arcasHLA genotype`: the HLA genotype is predicted from the extracted reads.
+3. `arcasHLA merge`: the genotypes of all samples are combined into cohort tables.
+4. `arcasHLA customize` builds an HLA reference with the alleles of each sample and `arcasHLA quant` quantifies their expression.
+
+Notes:
+- HLA typing uses the bams of the `align` step, or existing bams (`bam_files` or `{outdir}/star/`) when `align = false`. A `.bai` index next to the bam is used when available, otherwise arcasHLA indexes the bam.
+- Sample ids can't contain a dot (`.`), because arcasHLA names its outputs after the part of the file name before the first dot.
+- The processes use the `arcashla` label. Before any sample is processed, `arcasReference` checks that arcasHLA has an IMGT/HLA database and writes the database version to `{outdir}/arcas-hla/arcashla_versions.txt`.
+
+#### IMGT/HLA database
+
+arcasHLA reads the IMGT/HLA database from the `dat/` folder of its installation (bioconda: `/usr/local/share/arcas-hla-<version>-<build>/`) and tries to download it there when it is missing. The standard arcasHLA container (biocontainers `arcas-hla`) doesn't include the database and is read-only. For reproducible results, use a container with the database built in:
+
+```bash
+singularity build --fakeroot arcas-hla_0.6.0_IMGT-3.66.0.sif containers/arcashla/arcashla.def
+```
+The recipe (`containers/arcashla/arcashla.def`) starts from biocontainers `arcas-hla:0.6.0`, downloads an IMGT/HLA release branch (`IMGT_BRANCH`, e.g. `3660` = 3.66.0), unpacks `hla.dat.zip`, runs `arcasHLA reference --rebuild`, downloads the reference FASTA files in `dat/ref` that the bioconda package only contains as Git LFS placeholders (checked against their sha256), and patches `customize.py` for current Biopython (`Bio.Alphabet` was removed in Biopython 1.78). The build ends with a check that all arcasHLA commands used by the pipeline load. This avoids `arcasHLA reference --version`, which depends on Git LFS downloads that often fail and only knows IMGT/HLA versions up to 3.46.0 (arcasHLA 0.6.0). IMGT/HLA releases newer than 3.46.0 are not officially validated by arcasHLA, so compare a few samples with earlier results when changing the version.
+
+Use it in the run config:
+```groovy
+process {
+    withLabel:arcashla {
+        container = "/path/to/arcas-hla_0.6.0_IMGT-3.66.0.sif"
+    }
+}
+```
+
+Alternative: keep the database outside the container in a prepared `dat/` folder and bind-mount it. Use the same arcasHLA version for preparing and running:
+```bash
+IMG=/path/to/arcas-hla_0.5.0--hdfd78af_3.sif
+ARCAS=/usr/local/share/arcas-hla-0.5.0-3            # installation folder inside the container
+DAT=/path/to/resources/arcasHLA/dat_arcas-hla-0.5.0_IMGT-3.66.0
+
+mkdir -p ${DAT}
+singularity exec -B ${DAT} ${IMG} cp -r ${ARCAS}/dat/. ${DAT}/      # files shipped with arcasHLA (dat/info)
+git clone --depth 1 --branch 3660 https://github.com/ANHIG/IMGTHLA.git ${DAT}/IMGTHLA
+(cd ${DAT}/IMGTHLA && unzip hla.dat.zip && rm hla.dat.zip)
+singularity exec -B ${DAT}:${ARCAS}/dat ${IMG} arcasHLA reference --rebuild --verbose
+```
+and add `containerOptions = "-B ${DAT}:${ARCAS}/dat"` (with the paths filled in) to `withLabel:arcashla`. With Docker (e.g. the `gcp` profile) use `-v` instead of `-B`.
+- A stub test (no containers needed) can be run from the repository root: `nextflow run . -stub -c test/hla/stub_test.config`.
+
+Output in `{outdir}/arcas-hla/`:
+```
+arcas-hla/
+├── {output_basename}.hla.genotypes.tsv   HLA genotype per sample
+├── {output_basename}.hla.genes.tsv       read counts per HLA gene per sample
+└── {sample_id}/
+    ├── {sample_id}.genotype.json         predicted HLA genotype
+    ├── {sample_id}.genes.json, .alignment.p, .genotype.log
+    └── quant/                            {sample_id}.quant*.tsv: HLA allele and gene expression
+```
 
 ## Support and Contributions
 

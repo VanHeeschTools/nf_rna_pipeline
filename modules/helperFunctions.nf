@@ -213,6 +213,24 @@ def checkInputFiles(List samples) {
         check_files("twobit", "${params.twobit}*", "file")
     }
 
+    // Check HLA typing parameters
+    if (params.hla_typing && params.run_mode != "qc") {
+        if (!params.align && !bam_avail) {
+            error  """
+                HLA typing needs bam files, but none were found in ${default_bams}
+                If `align = false`, define your bam location with `bam_files=[path_to_file]` in `params.config`
+                """.stripIndent()
+        }
+        // arcasHLA names its outputs after the part of the file name before the first dot
+        def ids_with_dot = samples
+            .findAll { row -> row[0].sequence == "rna" && row[0].id.toString().contains('.') }
+            .collect { row -> row[0].id }
+        if (ids_with_dot) {
+            error "HLA typing does not support sample ids containing a dot ('.'), rename these samples: ${ids_with_dot.join(', ')}"
+        }
+        log.info "hla typing    : arcasHLA genotype and expression"
+    }
+
     // Check fusion parameters
     if (params.fusions){
         check_files("arriba_reference", params.arriba_reference, "dir")
