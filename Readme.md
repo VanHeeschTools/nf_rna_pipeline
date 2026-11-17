@@ -132,7 +132,7 @@ subject3,sampleC,cohort2,tumor,dna,vcf,/path/to/sampleC.vcf,
 
 Notes:
 - All file paths (filename_1 and filename_2) must not contain spaces and should have extensions that match the declared file_type.
-- Subject and sample ids must contain charaters (only numeric values will not be read properly).
+- Sample, subject and group ids must contain at least one letter: ids with only digits (e.g. `123`) are read as numbers, and the pipeline stops at the start with a list of these ids.
 - For single-end data or non-FASTQ files (e.g., BAM, CRAM, VCF), filename_2 can be omitted or left empty. For CRAM rows filename_2 is ignored: no `.crai` index is needed, because the whole file is converted.
 
 ### CRAM input

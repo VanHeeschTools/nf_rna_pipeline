@@ -1,5 +1,5 @@
 include { validateParameters; paramsSummaryLog; samplesheetToList; } from 'plugin/nf-schema'
-include { checkInputFiles; is_paired_end } from "../modules/helperFunctions.nf"
+include { checkInputFiles; is_paired_end; check_numeric_ids } from "../modules/helperFunctions.nf"
 include { PREPARE_READS } from '../subworkflows/PREPARE_READS'
 include { QC } from '../subworkflows/QC'
 include { ALIGN } from '../subworkflows/ALIGN'
@@ -20,6 +20,11 @@ workflow RNASEQ {
     run_fusions    = params.run_mode == "qc" ? false : params.fusions
     run_expression = params.run_mode == "qc" ? false : params.expression
     run_hla_typing = params.run_mode == "qc" ? false : params.hla_typing
+
+    // Stop with a clear message for ids with only digits, before the schema validation reports them unclearly
+    if (params.input) {
+        check_numeric_ids(params.input)
+    }
 
     // Validate input parameters
     validateParameters()

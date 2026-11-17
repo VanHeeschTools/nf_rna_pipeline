@@ -15,6 +15,43 @@ def printHeader () {
 
 
 /*
+ * Checks the samplesheet for ids that consist only of digits (e.g. "123" or "0123").
+ * The samplesheet validation reads them as numbers instead of text, which fails with an
+ * unclear message and would drop leading zeros. Stops with a clear message before anything runs.
+ *
+ * @param samplesheet path to the CSV samplesheet
+ */
+def check_numeric_ids(samplesheet) {
+    def lines = file(samplesheet).readLines().findAll { line -> line.trim() }
+    if (!lines) {
+        return
+    }
+
+    def header = lines[0].split(',', -1)*.trim()
+    def id_columns = ["sample_id", "subject_id", "group_id"].findAll { column -> column in header }
+    def numeric_ids = []
+
+    lines.drop(1).eachWithIndex { line, index ->
+        def values = line.split(',', -1)*.trim()
+        id_columns.each { column ->
+            def column_index = header.indexOf(column)
+            def value = column_index < values.size() ? values[column_index] : ""
+            if (value ==~ /-?\d+(\.\d+)?/) {
+                numeric_ids << [line: index + 2, column: column, value: value]
+            }
+        }
+    }
+
+    if (numeric_ids) {
+        def message = ["", "The samplesheet contains ids that consist only of digits, which the pipeline can't use:"]
+        message += numeric_ids.collect { entry -> "  line ${entry.line}: ${entry.column} '${entry.value}'".toString() }
+        message << "Add at least one letter to these ids (for example 'S${numeric_ids[0].value}') and use the same ids in related files such as strand_info."
+        message << "No analysis was started."
+        error message.join('\n')
+    }
+}
+
+/*
  * Finds sample ids that occur more than once in the samplesheet.
  *
  * @param samples list of [meta, filename_1, filename_2] rows from samplesheetToList
