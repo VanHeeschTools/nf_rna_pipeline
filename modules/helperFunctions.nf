@@ -250,6 +250,18 @@ def checkInputFiles(List samples) {
         check_files("twobit", "${params.twobit}*", "file")
     }
 
+    // Check the long-read transcriptome
+    if (params.longread_gtf) {
+        check_files("longread_gtf", params.longread_gtf, "file")
+        if (!params.merge_longread) {
+            log.info "longread gtf  : given, but merge_longread = false, the transcriptome is built from short reads only"
+        } else if (!params.merge) {
+            log.info "longread gtf  : given, but merge = false, so it is not merged with a short-read transcriptome"
+        } else {
+            log.info "longread gtf  : ${params.longread_gtf} (merged with the short-read transcriptome, end_tolerance ${params.end_tolerance} nt)"
+        }
+    }
+
     // Check HLA typing parameters
     if (params.hla_typing && params.run_mode != "qc") {
         if (!params.align && !bam_avail) {

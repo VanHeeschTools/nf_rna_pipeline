@@ -86,7 +86,7 @@ workflow ASSEMBLY {
             // Combine long-read and short-read transcriptoem
             lr_sr_combine_transcriptome(
                 filterAnnotate.out.gtf,
-                params.longread_gtf,
+                longread_gtf,
                 trmap.out.trmap_tab_file,
                 min_occurrence,
                 end_tolerance

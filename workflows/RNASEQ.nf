@@ -190,7 +190,7 @@ workflow RNASEQ {
                 params.output_basename,
                 params.min_occurrence,
                 params.min_tpm,
-                params.longread_gtf,
+                params.merge_longread ? params.longread_gtf : null,
                 params.end_tolerance)
 
         assembled_gtf = ASSEMBLY.out.output_gtf

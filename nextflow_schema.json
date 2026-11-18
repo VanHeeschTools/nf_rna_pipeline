@@ -138,6 +138,11 @@
                     "description": "Toggle for HLA typing and HLA allele expression with arcasHLA from the STAR alignments",
                     "default": false
                 },
+                "merge_longread": {
+                    "type": "boolean",
+                    "description": "Toggle for merging the long-read transcriptome (longread_gtf) with the short-read transcriptome. Only used when longread_gtf is given; when false the transcriptome is built from short reads only.",
+                    "default": true
+                },
                 "run_mode": {
                     "type": "string",
                     "description": "Controls which modules of the RNA-seq workflow are executed. Options are 1) manual: User explicitly control modules with module toggles (qc, align, assembly, merge, fusions and expression). 2) qc: Run only the QC module and toggle the rest to false. Useful for verifying sample quality and inputs before running the full pipeline. 3. qc_restart: Resume the workflow from previously completed QC outputs,skipping the QC module. Enables downstream modules as defined in the module toggles. ",
@@ -201,6 +206,12 @@
                     "type": "integer",
                     "description": "Minimum occurrence to include a transcript in the assembled transcriptome",
                     "default": 1
+                },
+                "end_tolerance": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Maximum difference (nt) at which long-read and short-read transcript ends still count as the same transcript when merging longread_gtf",
+                    "default": 100
                 }
             }
         },
@@ -221,6 +232,12 @@
                 "sample_gtf_list": {
                     "type": "string",
                     "description": "Path to file containing a list of individual sample GTFs for merging"
+                },
+                "longread_gtf": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "description": "Transcriptome gtf of the nf_longread pipeline. When given (and merge_longread = true) it is merged with the short-read transcriptome."
                 },
                 "conversion_references": {
                     "type": "string",
