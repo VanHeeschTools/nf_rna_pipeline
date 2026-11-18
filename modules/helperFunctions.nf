@@ -179,17 +179,27 @@ def check_files(name, path, type) {
 // Checks existence of files listed in this function
 // samples: list of [meta, filename_1, filename_2] rows from samplesheetToList
 def checkInputFiles(List samples) {
-    // Check inputs
+    // Check strandedness: QC determines it, otherwise it comes from strand_info or a previous QC run.
+    // Assembly and merge need it (together with bams) for every sample.
     def default_strand =  "${params.outdir}/check_strandedness/strandedness_all.txt"
-    if (!params.qc && ( params.align || params.assembly )) {
-        if (!params.strand_info && file(default_strand, type : "file").exists()) {
-            log.info "strand info   : ${default_strand}".stripIndent()
-        } else if (params.strand_info && file(params.strand_info, type : "file").exists()) {
-            log.info "strand info   : ${params.strand_info}".stripIndent()
+    def run_qc = params.run_mode == "qc_restart" ? false : (params.run_mode == "qc" || params.qc)
+    def needs_strand = params.run_mode != "qc" && !run_qc && (params.align || params.assembly || params.merge)
+    if (needs_strand) {
+        if (params.strand_info) {
+            if (!file(params.strand_info, type : "file").exists()) {
+                error "--strand_info: file doesn't exist, check path ${params.strand_info}\nNo analysis was started."
+            }
+            log.info "strand info   : ${params.strand_info}"
+        } else if (file(default_strand, type : "file").exists()) {
+            log.info "strand info   : ${default_strand}"
         } else {
-            error  """
-                No strand information found in ${default_strand}
-                If `qc = false`, define your strandedness info file with `strand_info` in `params.config`
+            def steps = ["align", "assembly", "merge"].findAll { step -> params[step] }.join(', ')
+            error """
+                No strandedness information available, which is needed for: ${steps}.
+                QC is not run (qc = false or run_mode = qc_restart) and ${default_strand} doesn't exist.
+                Either run QC (qc = true), or give a strandedness file with `strand_info`
+                (one line per sample: 'sample_id rf', 'sample_id fr' or 'sample_id unstranded').
+                No analysis was started.
                 """.stripIndent()
         }
     }
@@ -221,13 +231,16 @@ def checkInputFiles(List samples) {
     }
 
     // Check bams and references for assembly steps
+    // Assembly and merge need bams together with the strandedness of each sample
+    if ((params.assembly || params.merge) && params.run_mode != "qc" && !bam_avail) {
+        error  """
+            Assembly and merge need bam files, but none were found in ${default_bams}
+            If `align = false`, define your bam location with `bam_files=[path_to_file]` in `params.config`
+            No analysis was started.
+            """.stripIndent()
+    }
+
     if (params.assembly){
-        if (!bam_avail) {
-            error  """
-                No bam found in ${default_bams}
-                If `align = false`, define your bam location with `bam_files=[path_to_file]` in `params.config`
-                """.stripIndent()
-        }
 
         check_files("refseq_gtf", "${params.refseq_gtf}*", "file")
         check_files("masked_fasta", "${params.masked_fasta}", "file")
@@ -355,6 +368,24 @@ def is_paired_end(List samples) {
     }
 
     return paired_flags[0]
+}
+
+/*
+ * Reads one line of a strandedness file (strand_info or check_strandedness/strandedness_all.txt):
+ * "sample_id<whitespace>strand_type" with strand_type rf, fr or unstranded.
+ * Returns the same tuple as getStrandtype: [sample_id, strand_type, featurecounts code].
+ */
+def parse_strand_line(String line) {
+    def strand_codes = ["rf": 1, "fr": 2, "unstranded": 0]
+    def fields = line.trim().split(/\s+/)
+    def strand_type = fields.size() > 1 ? fields[1].toLowerCase() : ""
+    if (fields.size() < 2 || !strand_codes.containsKey(strand_type)) {
+        error """
+            Invalid line in the strandedness file: '${line.trim()}'
+            Expected 'sample_id strand_type' with strand_type 'rf', 'fr' or 'unstranded'.
+            """.stripIndent()
+    }
+    return tuple(fields[0], strand_type, strand_codes[strand_type])
 }
 
 // Groovy function to check if strand type exists and to set the strand type if found

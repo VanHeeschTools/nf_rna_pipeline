@@ -101,6 +101,7 @@ workflow ASSEMBLY {
         assembled_transcriptome_fasta = transcriptome_fasta.out
     } else {
         merged_filtered_gtf = null
+        output_gtf = null
         assembled_transcriptome_fasta = null
     }
     
