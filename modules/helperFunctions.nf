@@ -376,33 +376,46 @@ def is_paired_end(List samples) {
  * Returns the same tuple as getStrandtype: [sample_id, strand_type, featurecounts code].
  */
 def parse_strand_line(String line) {
-    def strand_codes = ["rf": 1, "fr": 2, "unstranded": 0]
     def fields = line.trim().split(/\s+/)
     def strand_type = fields.size() > 1 ? fields[1].toLowerCase() : ""
-    if (fields.size() < 2 || !strand_codes.containsKey(strand_type)) {
+    if (fields.size() < 2 || featurecounts_strand_code(strand_type) == null) {
         error """
             Invalid line in the strandedness file: '${line.trim()}'
             Expected 'sample_id strand_type' with strand_type 'rf', 'fr' or 'unstranded'.
             """.stripIndent()
     }
-    return tuple(fields[0], strand_type, strand_codes[strand_type])
+    return tuple(fields[0], strand_type, featurecounts_strand_code(strand_type))
+}
+
+/*
+ * featureCounts -s code for a strand type. featureCounts takes the strand of read 1 as the
+ * strand of the fragment (paired-end):
+ *   rf (RF/fr-firststrand, e.g. dUTP): read 1 on the opposite strand of the gene -> 2 (reversely stranded)
+ *   fr (FR/fr-secondstrand):           read 1 on the same strand as the gene     -> 1 (stranded)
+ *   unstranded                                                                   -> 0
+ */
+def featurecounts_strand_code(String strand_type) {
+    return ["rf": 2, "fr": 1, "unstranded": 0][strand_type]
 }
 
 // Groovy function to check if strand type exists and to set the strand type if found
+// strand_tuple: sample id and the last word of the check_strandedness conclusion
 def getStrandtype(strand_tuple) {
     def (sample_id, strand) = strand_tuple
-    def strand_type = null
+    def strand_label = "unstranded"
 
     if (strand ==~ /.*RF\/fr-firststrand/) {
-        strand_type = tuple(sample_id, "rf", 1)
+        strand_label = "rf"
     } else if (strand ==~ /.*FR\/fr-secondstrand/) {
-        strand_type = tuple(sample_id, "fr", 2)
-    } else {
-        strand_type = tuple(sample_id, "unstranded", 0)
-        // Optionally warn or exit here
-        // println "WARNING: Data for ${sample_id} is unstranded"
-        // exit 1
+        strand_label = "fr"
+    } else if (!(strand ==~ /.*unstranded/)) {
+        // check_strandedness could not decide (between 60% and 90% of reads in one direction)
+        def words = strand.toString().tokenize()
+        def tool_result = words.size() > 1 ? words[-1] : "no result"
+        log.warn "Strandedness of ${sample_id} could not be determined (check_strandedness ended with '${tool_result}'), " +
+            "it is treated as unstranded. See check_strandedness/${sample_id}.txt, " +
+            "or give the strandedness with `strand_info` and rerun with qc = false."
     }
 
-    return strand_type
+    return tuple(sample_id, strand_label, featurecounts_strand_code(strand_label))
 }

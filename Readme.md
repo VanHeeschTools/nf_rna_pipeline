@@ -212,7 +212,7 @@ Notes:
 
 ### Optional inputs for modular execution
 
-- `strand_info`: When not running the QC step, the path to the file containing strand information for each sample can be provided. The file is expected to be plain text (no header) with two columns separated by a tab or spaces: sample_id and strand information (`rf` for first strand, `fr` for second strand or `unstranded`). If `strand_info` is not provided, the pipeline uses the file of a previous QC run: `"${outdir}/check_strandedness/strandedness_all.txt"`. Assembly and merge need both strandedness and bam files for every sample: when either is missing, the pipeline stops at the start with a message, before any analysis is started. Example: 
+- `strand_info`: When not running the QC step, the path to the file containing strand information for each sample can be provided. The file is expected to be plain text (no header) with two columns separated by a tab or spaces: sample_id and strand information (`rf` for first strand, `fr` for second strand or `unstranded`). `rf` (RF/fr-firststrand, e.g. dUTP/TruSeq stranded) is run with StringTie `--rf` and featureCounts `-s 2`, `fr` (FR/fr-secondstrand) with `--fr` and `-s 1`. Samples for which QC can't determine the strandedness are treated as unstranded, with a warning. If `strand_info` is not provided, the pipeline uses the file of a previous QC run: `"${outdir}/check_strandedness/strandedness_all.txt"`. Assembly and merge need both strandedness and bam files for every sample: when either is missing, the pipeline stops at the start with a message, before any analysis is started. Example: 
 ```
 sample_01 rf
 sample_02 unstranded
