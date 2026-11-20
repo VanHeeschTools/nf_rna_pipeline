@@ -49,6 +49,18 @@ workflow IMMUNE {
         }
     arcasQuant(quant_input, paired_end)
 
+    // Report genes that could not be quantified (typed allele not in arcasHLA's cDNA reference)
+    arcasQuant.out.skipped
+        .subscribe { sample_id, skipped_file ->
+            def skipped_genes = skipped_file.readLines().drop(1)
+                .findAll { line -> line.trim() }
+                .collect { line -> line.tokenize('\t')[0] }
+            if (skipped_genes) {
+                log.warn "HLA expression of ${sample_id}: ${skipped_genes.join(', ')} not quantified (typed allele not in arcasHLA's cDNA reference), " +
+                    "see arcas-hla/${sample_id}/quant/${sample_id}.quant_skipped_genes.tsv"
+            }
+        }
+
     emit:
     hla_genotypes = arcasMerge.out.genotypes // Table with the HLA genotype of all samples
 }

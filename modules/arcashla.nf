@@ -144,7 +144,8 @@ process arcasQuant {
         val paired_end                                    // Bool, true if data is paired end
 
     output:
-        path "quant/${sample_id}.quant*", emit: quant // HLA allele and gene expression tables
+        path "quant/${sample_id}.quant*", emit: quant                                                    // HLA allele and gene expression tables
+        tuple val(sample_id), path("quant/${sample_id}.quant_skipped_genes.tsv"), emit: skipped // Genes that could not be quantified
 
     script:
         def single = paired_end ? "" : "--single"
@@ -152,10 +153,25 @@ process arcasQuant {
         """
         mkdir -p tmp ref quant
 
+        # Locate the arcasHLA installation (see arcasReference)
+        arcas_bin=\$(command -v arcasHLA)
+        arcas_main=\$(grep -m1 -oE '/[^ ]+/arcasHLA( |\$)' "\${arcas_bin}" | tr -d ' ' || true)
+        arcas_dir=\$(dirname "\$(readlink -f "\${arcas_main:-\${arcas_bin}}")")
+
+        # Only genes whose typed alleles all have a cDNA sequence in arcasHLA's fixed dat/ref/cDNA.json can be
+        # quantified, other genes would make quant fail or be quantified incompletely (see arcashla_quant_genes.py)
+        genes=\$(arcashla_quant_genes.py "${genotype}" "\${arcas_dir}" "quant/${sample_id}.quant_skipped_genes.tsv")
+        if [ -z "\${genes}" ]; then
+            echo "No HLA gene of ${sample_id} can be quantified, see quant/${sample_id}.quant_skipped_genes.tsv" >&2
+            rm -rf tmp ref
+            exit 0
+        fi
+
         # Build HLA reference with the alleles of this sample
         arcasHLA customize \
             --genotype ${genotype} \
             --subject ${sample_id} \
+            --genes "\${genes}" \
             --outdir ref \
             --temp tmp/ \
             --threads ${task.cpus} \
@@ -179,6 +195,7 @@ process arcasQuant {
         """
         mkdir -p quant
         touch quant/${sample_id}.quant.tsv quant/${sample_id}.quant.alleles.tsv quant/${sample_id}.quant.genes.tsv
+        printf 'gene\ttyped_alleles\tmissing_in_arcashla_cdna\treason\n' > quant/${sample_id}.quant_skipped_genes.tsv
         """
 }
 
