@@ -20,6 +20,7 @@ This pipeline is designed for the analysis of RNA-seq data, covering various mod
 3. **Transcriptome Assembly**: Assembles transcripts of individual samples with stringtie, merges all samples and checks against a reference with GFFcompare, and finally filters the merged transcriptome.
 4. **Fusions**: Detects gene fusions using Arriba, optionally takes vcf files from WGS to refine confidence thresholds.
 5. **Expression Analysis**: Quantifies gene expression using Salmon.
+6. **HLA typing (optional)**: Predicts the HLA genotype of each sample with arcasHLA from the STAR alignments, and quantifies HLA allele expression.
 
 ## Usage
 
@@ -29,7 +30,7 @@ This pipeline is designed for the analysis of RNA-seq data, covering various mod
 
     - **Inputs**: Parameters are specified in `params.config`. See an example [here](https://github.com/mars13/nf_rna_pipeline/blob/dev/test/documentation/test_params.config). Alternatively, they can be provided as command-line arguments if double-dashed (`--samplesheet`). A detailed description of the required inputs can be found in the [Inputs](#inputs) section.
 
-    - **Modules**: Adjust settings in `params.config` to toggle pipeline modules on and off (`qc`, `align`, `assembly`, `merge`, `fusion`, `expression`). All steps are set to `true` by default.
+    - **Modules**: Adjust settings in `params.config` to toggle pipeline modules on and off (`qc`, `align`, `assembly`, `merge`, `fusion`, `expression`). All steps are set to `true` by default. The optional HLA typing step (`hla_typing`) is set to `false` by default, see [HLA typing](#hla-typing).
     
     ```
         params {
@@ -131,7 +132,7 @@ subject3,sampleC,cohort2,tumor,dna,vcf,/path/to/sampleC.vcf,
 
 Notes:
 - All file paths (filename_1 and filename_2) must not contain spaces and should have extensions that match the declared file_type.
-- Subject and sample ids must contain charaters (only numeric values will not be read properly).
+- Sample, subject and group ids must contain at least one letter: ids with only digits (e.g. `123`) are read as numbers, and the pipeline stops at the start with a list of these ids.
 - For single-end data or non-FASTQ files (e.g., BAM, CRAM, VCF), filename_2 can be omitted or left empty. For CRAM rows filename_2 is ignored: no `.crai` index is needed, because the whole file is converted.
 
 ### CRAM input
@@ -187,6 +188,8 @@ Notes:
 | `fusions`                   | Toggle for the fusion detection module.                                                             | boolean    | No           | `fusions`                          | `true`                               |
 | `merge`                     | Toggle for merging individual GTF files into a single file.                                         | boolean    | No           | `merge`                             | `true`                               |
 | `build_annotation`          | Toggle for building a custom annotation from merged GTFs.                                           | boolean    | No           | `build_annotation`                 | `true`                               |
+| `hla_typing`                | Toggle for HLA typing and HLA allele expression with arcasHLA (see [HLA typing](#hla-typing)).      | boolean    | No           | `hla_typing`                       | `false`                              |
+| `merge_longread`            | Toggle for merging the long-read transcriptome (`longread_gtf`) with the short-read transcriptome. Only used when `longread_gtf` is given. | boolean | No | `merge` | `true` |
 | **Extended pipeline options**|                                                                                                     |            |              |                                    |                                      |
 | `custom_annotation`         | Formats for custom annotation outputs (e.g., "orfquant").                                           | string     | No           | `build_annotation`                 | `"orfquant"`                         |
 | `expression_mode`           | Expression quantification mode for tools like Salmon quant (sq) and FeatureCounts (fc). Can be combined (e.g., "sqfc").              | string     | No           | `expression`                       | `"sqfc"`                             |
@@ -199,6 +202,8 @@ Notes:
 | `sample_gtf_list`           | Path to a file containing a list of individual sample GTFs for merging.                             | string     | No           | `merge`                            |                                      |
 | `strand_info`               | Strandedness information, if available.                                                             | string     | No           | `assembly`                         |                                      |
 | `conversion_references`     | Text file listing candidate reference fastas used to convert CRAM input to fastq, one path per line (see [CRAM input](#cram-input)). Not used for the analysis itself. | string | No | CRAM input |  |
+| `longread_gtf`              | Transcriptome gtf of the nf_longread pipeline. When given (and `merge_longread = true`), it is merged with the short-read transcriptome. The file must exist. | string | No | `merge` | |
+| `end_tolerance`             | Maximum difference (nt) at which long-read and short-read transcript ends still count as the same transcript. | integer | No | `merge` | `100` |
 | `save_converted_fastq`      | Publish fastq files converted from CRAM input to `{outdir}/cram_to_fastq/`.                        | boolean    | No           | CRAM input                         | `false`                              |
 | **Maximum specifications**   |                                                                                                     |            |              |                                    |                                      |
 | `max_memory`                | Maximum memory allocation per process.                                                              | string     | No           | All modules                        |                                      |
@@ -207,7 +212,7 @@ Notes:
 
 ### Optional inputs for modular execution
 
-- `strand_info`: When not running the QC step, the path to the file containing strand information for each sample can be provided. The file is expected to be plain text file (tab separated, no headers) with two columns: sample_id and strand information (`rf` for first strand,`fr` for second strand or `unstranded`). If `strand_info` is not provided the software will check the default location: `"${outdir}/check_strandedness/strandedness_all.txt"`. Example: 
+- `strand_info`: When not running the QC step, the path to the file containing strand information for each sample can be provided. The file is expected to be plain text (no header) with two columns separated by a tab or spaces: sample_id and strand information (`rf` for first strand, `fr` for second strand or `unstranded`). `rf` (RF/fr-firststrand, e.g. dUTP/TruSeq stranded) is run with StringTie `--rf` and featureCounts `-s 2`, `fr` (FR/fr-secondstrand) with `--fr` and `-s 1`. Samples for which QC can't determine the strandedness are treated as unstranded, with a warning. If `strand_info` is not provided, the pipeline uses the file of a previous QC run: `"${outdir}/check_strandedness/strandedness_all.txt"`. Assembly and merge need both strandedness and bam files for every sample: when either is missing, the pipeline stops at the start with a message, before any analysis is started. Example: 
 ```
 sample_01 rf
 sample_02 unstranded
@@ -227,6 +232,7 @@ The pipeline generates output files including quality reports, trimmed reads, al
 
 ```
 {outdir}
+├── arcas-hla/          (only with hla_typing)
 ├── check_strandedness/
 ├── customannotation/
 ├── fastp/
@@ -237,6 +243,64 @@ The pipeline generates output files including quality reports, trimmed reads, al
 ```
 
 Additionally it produces Nextflow execution reports in `{project_folder}/log`
+
+### HLA typing
+
+With `hla_typing = true` the HLA genotype and HLA allele expression of every RNA sample are determined with [arcasHLA](https://github.com/RabadanLab/arcasHLA) from the STAR alignments:
+
+1. `arcasHLA extract`: reads from chromosome 6 (`6` or `chr6`, detected from the bam header) and unmapped reads are extracted from the sorted bam.
+2. `arcasHLA genotype`: the HLA genotype is predicted from the extracted reads.
+3. `arcasHLA merge`: the genotypes of all samples are combined into cohort tables.
+4. `arcasHLA customize` builds an HLA reference with the alleles of each sample and `arcasHLA quant` quantifies their expression.
+
+Notes:
+- HLA typing uses the bams of the `align` step, or existing bams (`bam_files` or `{outdir}/star/`) when `align = false`. A `.bai` index next to the bam is used when available, otherwise arcasHLA indexes the bam.
+- Sample ids can't contain a dot (`.`), because arcasHLA names its outputs after the part of the file name before the first dot.
+- The processes use the `arcashla` label. Before any sample is processed, `arcasReference` checks that arcasHLA has an IMGT/HLA database and writes the database version to `{outdir}/arcas-hla/arcashla_versions.txt`.
+
+#### IMGT/HLA database
+
+arcasHLA reads the IMGT/HLA database from the `dat/` folder of its installation (bioconda: `/usr/local/share/arcas-hla-<version>-<build>/`) and tries to download it there when it is missing. The standard arcasHLA container (biocontainers `arcas-hla`) doesn't include the database and is read-only. For reproducible results, use a container with the database built in:
+
+```bash
+singularity build --fakeroot arcas-hla_0.6.0_IMGT-3.66.0.sif containers/arcashla/arcashla.def
+```
+The recipe (`containers/arcashla/arcashla.def`) starts from biocontainers `arcas-hla:0.6.0`, downloads an IMGT/HLA release branch (`IMGT_BRANCH`, e.g. `3660` = 3.66.0), unpacks `hla.dat.zip`, runs `arcasHLA reference --rebuild`, downloads the reference FASTA files in `dat/ref` that the bioconda package only contains as Git LFS placeholders (checked against their sha256), and patches `customize.py` for current Biopython (`Bio.Alphabet` was removed in Biopython 1.78). The build ends with a check that all arcasHLA commands used by the pipeline load. This avoids `arcasHLA reference --version`, which depends on Git LFS downloads that often fail and only knows IMGT/HLA versions up to 3.46.0 (arcasHLA 0.6.0). IMGT/HLA releases newer than 3.46.0 are not officially validated by arcasHLA, so compare a few samples with earlier results when changing the version.
+
+Use it in the run config:
+```groovy
+process {
+    withLabel:arcashla {
+        container = "/path/to/arcas-hla_0.6.0_IMGT-3.66.0.sif"
+    }
+}
+```
+
+Alternative: keep the database outside the container in a prepared `dat/` folder and bind-mount it. Use the same arcasHLA version for preparing and running:
+```bash
+IMG=/path/to/arcas-hla_0.5.0--hdfd78af_3.sif
+ARCAS=/usr/local/share/arcas-hla-0.5.0-3            # installation folder inside the container
+DAT=/path/to/resources/arcasHLA/dat_arcas-hla-0.5.0_IMGT-3.66.0
+
+mkdir -p ${DAT}
+singularity exec -B ${DAT} ${IMG} cp -r ${ARCAS}/dat/. ${DAT}/      # files shipped with arcasHLA (dat/info)
+git clone --depth 1 --branch 3660 https://github.com/ANHIG/IMGTHLA.git ${DAT}/IMGTHLA
+(cd ${DAT}/IMGTHLA && unzip hla.dat.zip && rm hla.dat.zip)
+singularity exec -B ${DAT}:${ARCAS}/dat ${IMG} arcasHLA reference --rebuild --verbose
+```
+and add `containerOptions = "-B ${DAT}:${ARCAS}/dat"` (with the paths filled in) to `withLabel:arcashla`. With Docker (e.g. the `gcp` profile) use `-v` instead of `-B`.
+- A stub test (no containers needed) can be run from the repository root: `nextflow run . -stub -c test/hla/stub_test.config`.
+
+Output in `{outdir}/arcas-hla/`:
+```
+arcas-hla/
+├── {output_basename}.hla.genotypes.tsv   HLA genotype per sample
+├── {output_basename}.hla.genes.tsv       read counts per HLA gene per sample
+└── {sample_id}/
+    ├── {sample_id}.genotype.json         predicted HLA genotype
+    ├── {sample_id}.genes.json, .alignment.p, .genotype.log
+    └── quant/                            {sample_id}.quant*.tsv: HLA allele and gene expression
+```
 
 ## Support and Contributions
 

@@ -1,0 +1,98 @@
+Bootstrap: docker
+From: quay.io/biocontainers/arcas-hla:0.6.0--hdfd78af_2
+
+# arcasHLA with a built-in IMGT/HLA database, so HLA typing doesn't depend on downloads at run time.
+# Also downloads the dat/ref fasta files (Git LFS placeholders in the bioconda package)
+# and patches customize.py for Biopython >= 1.78 (Bio.Alphabet removed).
+# Build (e.g. on the HPC):
+#   singularity build --fakeroot arcas-hla_0.6.0_IMGT-3.66.0.sif arcashla.def
+# To use another IMGT/HLA release, change IMGT_BRANCH (release without dots, e.g. 3460 = 3.46.0)
+# and the IMGT_HLA_version label.
+
+%labels
+    arcasHLA_version 0.6.0
+    IMGT_HLA_version 3.66.0
+
+%post
+    set -eu
+    ARCASHLA_VERSION=0.6.0  # must match the arcas-hla version of the base image
+    IMGT_BRANCH=3660
+
+    # Locate the arcasHLA installation (the folder with scripts/ and dat/).
+    # Bioconda installs a wrapper script in bin/ that calls <share>/arcas-hla-<version>/arcasHLA.
+    arcas_bin=$(command -v arcasHLA)
+    arcas_main=$(grep -m1 -oE '/[^ ]+/arcasHLA( |$)' "${arcas_bin}" | tr -d ' ' || true)
+    ARCAS=$(dirname "$(readlink -f "${arcas_main:-${arcas_bin}}")")
+    test -f "${ARCAS}/scripts/reference.py"
+    echo "arcasHLA installation: ${ARCAS}"
+
+    # arcasHLA 0.6.0 customize.py imports Bio.Alphabet, which was removed in Biopython 1.78.
+    # generic_dna is not used anywhere, so the import line can be dropped.
+    sed -i '/^from Bio.Alphabet import generic_dna$/d' "${ARCAS}/scripts/customize.py"
+    if grep -rq "Bio.Alphabet" "${ARCAS}/scripts/"; then
+        echo "ERROR: Bio.Alphabet still used in arcasHLA scripts" >&2
+        exit 1
+    fi
+
+    # The bioconda package is built from the GitHub source archive, which contains Git LFS
+    # placeholders instead of the reference fasta files in dat/ref (used by arcasHLA customize).
+    # Download the real files; the sha256 of each file is read from its placeholder.
+    python - "${ARCAS}/dat/ref" "${ARCASHLA_VERSION}" <<'PY'
+import hashlib, os, sys, urllib.request
+
+ref_dir, version = sys.argv[1], sys.argv[2]
+base_url = f"https://media.githubusercontent.com/media/RabadanLab/arcasHLA/v{version}/dat/ref/"
+
+for name in sorted(os.listdir(ref_dir)):
+    path = os.path.join(ref_dir, name)
+    with open(path, "rb") as handle:
+        head = handle.read(200)
+    if not head.startswith(b"version https://git-lfs"):
+        continue
+    oid = [line.split(b":")[1].decode() for line in head.splitlines() if line.startswith(b"oid sha256:")][0]
+    urllib.request.urlretrieve(base_url + name, path + ".download")
+    digest = hashlib.sha256()
+    with open(path + ".download", "rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    if digest.hexdigest() != oid:
+        sys.exit(f"ERROR: checksum mismatch for {name}")
+    os.replace(path + ".download", path)
+    print(f"{name}: downloaded, sha256 OK")
+PY
+
+    # Download the IMGT/HLA release (hla.dat is only provided as hla.dat.zip, no Git LFS needed)
+    rm -rf "${ARCAS}/dat/IMGTHLA"
+    git clone --depth 1 --branch "${IMGT_BRANCH}" https://github.com/ANHIG/IMGTHLA.git "${ARCAS}/dat/IMGTHLA"
+    cd "${ARCAS}/dat/IMGTHLA"
+    python -c "import zipfile; zipfile.ZipFile('hla.dat.zip').extractall('.')"
+    rm hla.dat.zip
+    test -s hla.dat
+    test -s wmda/hla_nom_p.txt
+
+    # Build the arcasHLA reference from the downloaded release, without checking out other versions
+    arcasHLA reference --rebuild --verbose
+    test -d "${ARCAS}/dat/ref"
+
+    # Make the database readable for any user running the container
+    chmod -R a+rX "${ARCAS}/dat"
+
+%test
+    arcas_bin=$(command -v arcasHLA)
+    arcas_main=$(grep -m1 -oE '/[^ ]+/arcasHLA( |$)' "${arcas_bin}" | tr -d ' ' || true)
+    ARCAS=$(dirname "$(readlink -f "${arcas_main:-${arcas_bin}}")")
+    test -s "${ARCAS}/dat/IMGTHLA/hla.dat"
+    grep -i 'version' "${ARCAS}/dat/IMGTHLA/release_version.txt"
+
+    # No Git LFS placeholders may be left in dat/ref
+    if grep -l "git-lfs.github.com" "${ARCAS}"/dat/ref/*.fasta; then
+        echo "ERROR: Git LFS placeholders left in dat/ref" >&2
+        exit 1
+    fi
+    echo "dat/ref fasta files: OK"
+
+    # Every arcasHLA command used by the pipeline must load (catches import errors at build time)
+    for command in extract genotype customize quant merge; do
+        arcasHLA ${command} -h > /dev/null
+        echo "arcasHLA ${command}: OK"
+    done

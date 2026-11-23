@@ -1,42 +1,3 @@
-// Define process to assign best index length
-process indexLength{
-    label "alignment"
-
-    input:
-        tuple val(sample_id), path(reads) // Tuple containing sample id and read paths
-    
-    output:
-        stdout
-    
-    script:
-        """
-        # Check first 10k reads for read length for star index
-        read_length=\$(gunzip -c "${reads[0]}" | \
-        head -n 10000 | \
-        awk '{if(NR%4==2) {count++; bases += length} } END{print bases/count - 1}')
-
-        # Make sure read length picks are correct
-        if [[ "\${read_length}" =~ "." ]]; then
-        read_length=\${read_length%.*}
-        fi
-
-        if (( \${read_length} >= 70 && \${read_length} <= 85 )); then
-        used_index=74
-        elif (( \${read_length} >= 86 && \${read_length} <= 111 )); then
-        used_index=99
-        elif (( \${read_length} >= 112 && \${read_length} <= 137 )); then
-        used_index=124
-        elif (( \${read_length} >= 138 && \${read_length} <= 163 )); then
-        used_index=149
-        else
-        used_index=99
-        fi
-
-        printf "%s" "\${used_index}"
-        """
-
-}
-
 // Define process for alignment with STAR
 process STAR {
     label "alignment"
@@ -44,7 +5,6 @@ process STAR {
     input: 
         tuple val(sample_id), path(reads) // Tuple containing sample id and read paths
         val paired_end                    // Bool set to true if input reads are paired end
-        val usedIndex                     // Val showing read length for the star index
         path reference_gtf                 // Input reference gtf file
         path star_index_basedir            // Path to star index dir
 
@@ -83,8 +43,31 @@ process STAR {
         mkdir -p ${sample_id}
         mkdir -p tmp/
 
+        # Select the STAR index for the read length (average of the first 2500 reads of the first fastq)
+        read_length=\$(gunzip -c "${reads[0]}" | \
+        head -n 10000 | \
+        awk '{if(NR%4==2) {count++; bases += length} } END{print bases/count - 1}')
+
+        # Make sure read length picks are correct
+        if [[ "\${read_length}" =~ "." ]]; then
+        read_length=\${read_length%.*}
+        fi
+
+        if (( \${read_length} >= 70 && \${read_length} <= 85 )); then
+        used_index=74
+        elif (( \${read_length} >= 86 && \${read_length} <= 111 )); then
+        used_index=99
+        elif (( \${read_length} >= 112 && \${read_length} <= 137 )); then
+        used_index=124
+        elif (( \${read_length} >= 138 && \${read_length} <= 163 )); then
+        used_index=149
+        else
+        used_index=99
+        fi
+        echo "Read length \${read_length}, using STAR index \${used_index}nt"
+
         # Use STAR for mapping the reads
-        time STAR --genomeDir "${star_index_basedir}/${usedIndex}nt" \
+        time STAR --genomeDir "${star_index_basedir}/\${used_index}nt" \
         --sjdbGTFfile ${reference_gtf} \
         ${star_input} \
         --outSAMattrRGline ID:${sample_id} LB:${sample_id} PL:IllUMINA SM:${sample_id} \

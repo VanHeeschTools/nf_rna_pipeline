@@ -15,6 +15,43 @@ def printHeader () {
 
 
 /*
+ * Checks the samplesheet for ids that consist only of digits (e.g. "123" or "0123").
+ * The samplesheet validation reads them as numbers instead of text, which fails with an
+ * unclear message and would drop leading zeros. Stops with a clear message before anything runs.
+ *
+ * @param samplesheet path to the CSV samplesheet
+ */
+def check_numeric_ids(samplesheet) {
+    def lines = file(samplesheet).readLines().findAll { line -> line.trim() }
+    if (!lines) {
+        return
+    }
+
+    def header = lines[0].split(',', -1)*.trim()
+    def id_columns = ["sample_id", "subject_id", "group_id"].findAll { column -> column in header }
+    def numeric_ids = []
+
+    lines.drop(1).eachWithIndex { line, index ->
+        def values = line.split(',', -1)*.trim()
+        id_columns.each { column ->
+            def column_index = header.indexOf(column)
+            def value = column_index < values.size() ? values[column_index] : ""
+            if (value ==~ /-?\d+(\.\d+)?/) {
+                numeric_ids << [line: index + 2, column: column, value: value]
+            }
+        }
+    }
+
+    if (numeric_ids) {
+        def message = ["", "The samplesheet contains ids that consist only of digits, which the pipeline can't use:"]
+        message += numeric_ids.collect { entry -> "  line ${entry.line}: ${entry.column} '${entry.value}'".toString() }
+        message << "Add at least one letter to these ids (for example 'S${numeric_ids[0].value}') and use the same ids in related files such as strand_info."
+        message << "No analysis was started."
+        error message.join('\n')
+    }
+}
+
+/*
  * Finds sample ids that occur more than once in the samplesheet.
  *
  * @param samples list of [meta, filename_1, filename_2] rows from samplesheetToList
@@ -142,17 +179,27 @@ def check_files(name, path, type) {
 // Checks existence of files listed in this function
 // samples: list of [meta, filename_1, filename_2] rows from samplesheetToList
 def checkInputFiles(List samples) {
-    // Check inputs
+    // Check strandedness: QC determines it, otherwise it comes from strand_info or a previous QC run.
+    // Assembly and merge need it (together with bams) for every sample.
     def default_strand =  "${params.outdir}/check_strandedness/strandedness_all.txt"
-    if (!params.qc && ( params.align || params.assembly )) {
-        if (!params.strand_info && file(default_strand, type : "file").exists()) {
-            log.info "strand info   : ${default_strand}".stripIndent()
-        } else if (params.strand_info && file(params.strand_info, type : "file").exists()) {
-            log.info "strand info   : ${params.strand_info}".stripIndent()
+    def run_qc = params.run_mode == "qc_restart" ? false : (params.run_mode == "qc" || params.qc)
+    def needs_strand = params.run_mode != "qc" && !run_qc && (params.align || params.assembly || params.merge)
+    if (needs_strand) {
+        if (params.strand_info) {
+            if (!file(params.strand_info, type : "file").exists()) {
+                error "--strand_info: file doesn't exist, check path ${params.strand_info}\nNo analysis was started."
+            }
+            log.info "strand info   : ${params.strand_info}"
+        } else if (file(default_strand, type : "file").exists()) {
+            log.info "strand info   : ${default_strand}"
         } else {
-            error  """
-                No strand information found in ${default_strand}
-                If `qc = false`, define your strandedness info file with `strand_info` in `params.config`
+            def steps = ["align", "assembly", "merge"].findAll { step -> params[step] }.join(', ')
+            error """
+                No strandedness information available, which is needed for: ${steps}.
+                QC is not run (qc = false or run_mode = qc_restart) and ${default_strand} doesn't exist.
+                Either run QC (qc = true), or give a strandedness file with `strand_info`
+                (one line per sample: 'sample_id rf', 'sample_id fr' or 'sample_id unstranded').
+                No analysis was started.
                 """.stripIndent()
         }
     }
@@ -184,13 +231,16 @@ def checkInputFiles(List samples) {
     }
 
     // Check bams and references for assembly steps
+    // Assembly and merge need bams together with the strandedness of each sample
+    if ((params.assembly || params.merge) && params.run_mode != "qc" && !bam_avail) {
+        error  """
+            Assembly and merge need bam files, but none were found in ${default_bams}
+            If `align = false`, define your bam location with `bam_files=[path_to_file]` in `params.config`
+            No analysis was started.
+            """.stripIndent()
+    }
+
     if (params.assembly){
-        if (!bam_avail) {
-            error  """
-                No bam found in ${default_bams}
-                If `align = false`, define your bam location with `bam_files=[path_to_file]` in `params.config`
-                """.stripIndent()
-        }
 
         check_files("refseq_gtf", "${params.refseq_gtf}*", "file")
         check_files("masked_fasta", "${params.masked_fasta}", "file")
@@ -211,6 +261,36 @@ def checkInputFiles(List samples) {
     // Check references for build_annotaiton
     if (params.build_annotation) {
         check_files("twobit", "${params.twobit}*", "file")
+    }
+
+    // Check the long-read transcriptome
+    if (params.longread_gtf) {
+        check_files("longread_gtf", params.longread_gtf, "file")
+        if (!params.merge_longread) {
+            log.info "longread gtf  : given, but merge_longread = false, the transcriptome is built from short reads only"
+        } else if (!params.merge) {
+            log.info "longread gtf  : given, but merge = false, so it is not merged with a short-read transcriptome"
+        } else {
+            log.info "longread gtf  : ${params.longread_gtf} (merged with the short-read transcriptome, end_tolerance ${params.end_tolerance} nt)"
+        }
+    }
+
+    // Check HLA typing parameters
+    if (params.hla_typing && params.run_mode != "qc") {
+        if (!params.align && !bam_avail) {
+            error  """
+                HLA typing needs bam files, but none were found in ${default_bams}
+                If `align = false`, define your bam location with `bam_files=[path_to_file]` in `params.config`
+                """.stripIndent()
+        }
+        // arcasHLA names its outputs after the part of the file name before the first dot
+        def ids_with_dot = samples
+            .findAll { row -> row[0].sequence == "rna" && row[0].id.toString().contains('.') }
+            .collect { row -> row[0].id }
+        if (ids_with_dot) {
+            error "HLA typing does not support sample ids containing a dot ('.'), rename these samples: ${ids_with_dot.join(', ')}"
+        }
+        log.info "hla typing    : arcasHLA genotype and expression"
     }
 
     // Check fusion parameters
@@ -290,21 +370,52 @@ def is_paired_end(List samples) {
     return paired_flags[0]
 }
 
+/*
+ * Reads one line of a strandedness file (strand_info or check_strandedness/strandedness_all.txt):
+ * "sample_id<whitespace>strand_type" with strand_type rf, fr or unstranded.
+ * Returns the same tuple as getStrandtype: [sample_id, strand_type, featurecounts code].
+ */
+def parse_strand_line(String line) {
+    def fields = line.trim().split(/\s+/)
+    def strand_type = fields.size() > 1 ? fields[1].toLowerCase() : ""
+    if (fields.size() < 2 || featurecounts_strand_code(strand_type) == null) {
+        error """
+            Invalid line in the strandedness file: '${line.trim()}'
+            Expected 'sample_id strand_type' with strand_type 'rf', 'fr' or 'unstranded'.
+            """.stripIndent()
+    }
+    return tuple(fields[0], strand_type, featurecounts_strand_code(strand_type))
+}
+
+/*
+ * featureCounts -s code for a strand type. featureCounts takes the strand of read 1 as the
+ * strand of the fragment (paired-end):
+ *   rf (RF/fr-firststrand, e.g. dUTP): read 1 on the opposite strand of the gene -> 2 (reversely stranded)
+ *   fr (FR/fr-secondstrand):           read 1 on the same strand as the gene     -> 1 (stranded)
+ *   unstranded                                                                   -> 0
+ */
+def featurecounts_strand_code(String strand_type) {
+    return ["rf": 2, "fr": 1, "unstranded": 0][strand_type]
+}
+
 // Groovy function to check if strand type exists and to set the strand type if found
+// strand_tuple: sample id and the last word of the check_strandedness conclusion
 def getStrandtype(strand_tuple) {
     def (sample_id, strand) = strand_tuple
-    def strand_type = null
+    def strand_label = "unstranded"
 
     if (strand ==~ /.*RF\/fr-firststrand/) {
-        strand_type = tuple(sample_id, "rf", 1)
+        strand_label = "rf"
     } else if (strand ==~ /.*FR\/fr-secondstrand/) {
-        strand_type = tuple(sample_id, "fr", 2)
-    } else {
-        strand_type = tuple(sample_id, "unstranded", 0)
-        // Optionally warn or exit here
-        // println "WARNING: Data for ${sample_id} is unstranded"
-        // exit 1
+        strand_label = "fr"
+    } else if (!(strand ==~ /.*unstranded/)) {
+        // check_strandedness could not decide (between 60% and 90% of reads in one direction)
+        def words = strand.toString().tokenize()
+        def tool_result = words.size() > 1 ? words[-1] : "no result"
+        log.warn "Strandedness of ${sample_id} could not be determined (check_strandedness ended with '${tool_result}'), " +
+            "it is treated as unstranded. See check_strandedness/${sample_id}.txt, " +
+            "or give the strandedness with `strand_info` and rerun with qc = false."
     }
 
-    return strand_type
+    return tuple(sample_id, strand_label, featurecounts_strand_code(strand_label))
 }

@@ -86,7 +86,7 @@ workflow ASSEMBLY {
             // Combine long-read and short-read transcriptoem
             lr_sr_combine_transcriptome(
                 filterAnnotate.out.gtf,
-                params.longread_gtf,
+                longread_gtf,
                 trmap.out.trmap_tab_file,
                 min_occurrence,
                 end_tolerance
@@ -101,6 +101,7 @@ workflow ASSEMBLY {
         assembled_transcriptome_fasta = transcriptome_fasta.out
     } else {
         merged_filtered_gtf = null
+        output_gtf = null
         assembled_transcriptome_fasta = null
     }
     

@@ -1,4 +1,4 @@
-include { indexLength; STAR } from '../modules/starAlign'
+include { STAR } from '../modules/starAlign'
 
 /*
 * Runs star mapper with given input files, sort resulting bam files with samtools
@@ -11,13 +11,9 @@ workflow ALIGN {
     star_index_basedir // Location of star index
 
     main:
-    // Obtain read length to use correct star index
-    index_length = indexLength(reads)
-
-    // Map reads to genome using star
+    // Map reads to genome using star, the STAR index matching the read length is selected in the STAR process
     STAR(reads,
         paired_end,
-        index_length,
         reference_gtf,
         star_index_basedir
         )

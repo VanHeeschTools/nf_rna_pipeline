@@ -1,11 +1,12 @@
 include { validateParameters; paramsSummaryLog; samplesheetToList; } from 'plugin/nf-schema'
-include { checkInputFiles; is_paired_end } from "../modules/helperFunctions.nf"
+include { checkInputFiles; is_paired_end; check_numeric_ids; parse_strand_line } from "../modules/helperFunctions.nf"
 include { PREPARE_READS } from '../subworkflows/PREPARE_READS'
 include { QC } from '../subworkflows/QC'
 include { ALIGN } from '../subworkflows/ALIGN'
 include { ASSEMBLY } from '../subworkflows/ASSEMBLY'
 include { FUSIONS } from '../subworkflows/FUSIONS'
 include { EXPRESSION } from '../subworkflows/EXPRESSION'
+include { IMMUNE } from '../subworkflows/IMMUNE'
 include { MULTIQC } from '../modules/multiqc.nf'
 
 workflow RNASEQ {
@@ -18,6 +19,12 @@ workflow RNASEQ {
     run_merge      = params.run_mode == "qc" ? false : params.merge
     run_fusions    = params.run_mode == "qc" ? false : params.fusions
     run_expression = params.run_mode == "qc" ? false : params.expression
+    run_hla_typing = params.run_mode == "qc" ? false : params.hla_typing
+
+    // Stop with a clear message for ids with only digits, before the schema validation reports them unclearly
+    if (params.input) {
+        check_numeric_ids(params.input)
+    }
 
     // Validate input parameters
     validateParameters()
@@ -114,22 +121,20 @@ workflow RNASEQ {
             star_input = reads
         }
 
-        // Look for strandedness summary file
+        // Look for strandedness: user-provided file, otherwise the summary file of a previous QC run
         default_strand_file = "${params.outdir}/check_strandedness/strandedness_all.txt"
-        if (params.strand_info) {
+        strand_file = params.strand_info ?: (file(default_strand_file).exists() ? default_strand_file : null)
+        if (strand_file) {
 
-            log.info "Using strandedness info from user-provided file: ${params.strand_info}"
+            log.info "Using strandedness info from: ${strand_file}"
 
-            channel.fromPath(params.strand_info, checkIfExists: true)
-            .splitText { line -> line.trim() }
+            // Tuple of sample id, strand type and featurecounts strand code, the same as from QC
+            strand = channel.fromPath(strand_file, checkIfExists: true)
+                .splitText()
+                .map { line -> line.trim() }
+                .filter { line -> line }
+                .map { line -> parse_strand_line(line) }
 
-        } else if (params.run_mode == "qc_restart" && !file(default_strand_file).isEmpty()) {
-
-            log.info "Using strandedness from previous QC: ${default_strand_file}"
-
-            channel.fromPath(default_strand_file, checkIfExists: true)
-                .splitCsv(sep: "\t", header: false)
-                .set { strand }
         } else {
 
             log.info "No strandedness provided or found, setting strand to `null`. WARNING: It will conflict with assembly step."
@@ -165,6 +170,12 @@ workflow RNASEQ {
     */
     if ((run_assembly || run_merge) && paired_end_check == true) {
 
+        // checkInputFiles normally stops earlier, this guards against a crash on missing inputs
+        if (strand == null || bam == null) {
+            error "Assembly and merge need both strandedness information and bam files for every sample, " +
+                "but ${strand == null ? 'strandedness' : 'bam files'} could not be found. No analysis was started."
+        }
+
         // Join the strand info with the bam file to prevent sample mixing
         stringtie_input = strand.join(bam)
         .map { row ->
@@ -183,7 +194,7 @@ workflow RNASEQ {
                 params.output_basename,
                 params.min_occurrence,
                 params.min_tpm,
-                params.longread_gtf,
+                params.merge_longread ? params.longread_gtf : null,
                 params.end_tolerance)
 
         assembled_gtf = ASSEMBLY.out.output_gtf
@@ -239,7 +250,13 @@ workflow RNASEQ {
     /*
     * Step 06: Immune landscape
     */
-    
+    // HLA typing and HLA expression from the STAR alignments
+    if (run_hla_typing) {
+        IMMUNE(bam,
+            paired_end_check,
+            params.output_basename)
+    }
+
     /*
     * Step 07: MultiQC
     */
